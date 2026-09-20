@@ -60,8 +60,8 @@ export function ActivityBar(): React.JSX.Element {
           </button>
         </Tooltip>
       ))}
-      {settings.aiAssistantEnabled && <Tooltip title="AI 助手" placement="right">
-        <button type="button" className={styles.item} aria-label="AI 助手" title="AI 助手" onClick={() => setAiOpen(true)}>
+      {settings.aiAssistantEnabled && <Tooltip title={t('aiAssistant.title')} placement="right">
+        <button type="button" className={styles.item} aria-label={t('aiAssistant.title')} title={t('aiAssistant.title')} onClick={() => setAiOpen(true)}>
           <Bot size={18} strokeWidth={1.75} />
         </button>
       </Tooltip>}

@@ -731,7 +731,8 @@
     "exportEncryptAll": "Chiffrer tout le fichier (hôtes et noms d'utilisateur compris, phrase secrète requise)",
     "exportEncryptAllHint": "Le fichier exporté ne contient aucun texte en clair. Remarque : une fois le chiffrement local activé, vous ne pouvez plus migrer en copiant le .db ; utilisez l'export/import chiffré.",
     "importEncryptedNote": "Ce fichier est entièrement chiffré. Saisissez la phrase secrète d'export pour importer tout son contenu.",
-    "section_lanSync": "LAN Sync"
+    "section_lanSync": "LAN Sync",
+    "accentValue": "Couleur d’accent {{color}}"
   },
   "shortcut": {
     "duplicateSession": "Dupliquer la session actuelle",

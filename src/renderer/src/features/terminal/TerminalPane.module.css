@@ -50,17 +50,12 @@
   padding: 2px;
   border-radius: var(--ofs-radius-m);
   border: 1px solid var(--ofs-shell-border);
-  background: var(--ofs-shell-surface-strong);
+  background: var(--ofs-bg-elevated);
   opacity: 0;
   transition: opacity 0.15s;
 }
-.pane:hover .hoverTools {
+.pane:hover .hoverTools,
+.pane:focus-within .hoverTools {
   opacity: 1;
 }
 
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  :global(:root:not([data-reduce-transparency='true'])) .hoverTools {
-    -webkit-backdrop-filter: blur(12px) saturate(1.06);
-    backdrop-filter: blur(12px) saturate(1.06);
-  }
-}

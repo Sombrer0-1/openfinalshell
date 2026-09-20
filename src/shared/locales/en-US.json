@@ -727,7 +727,8 @@
     "exportEncryptAll": "Encrypt the entire file (hosts and usernames too, requires an export passphrase)",
     "exportEncryptAllHint": "The exported file contains no plaintext. Note: after at-rest encryption is enabled you cannot migrate by copying the .db across machines — use encrypted export/import instead.",
     "importEncryptedNote": "This file is fully encrypted. Enter the export passphrase to import all of its contents.",
-    "section_lanSync": "LAN Sync"
+    "section_lanSync": "LAN Sync",
+    "accentValue": "Accent {{color}}"
   },
   "shortcut": {
     "duplicateSession": "Duplicate current session",

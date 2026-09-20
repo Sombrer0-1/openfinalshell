@@ -731,7 +731,8 @@
     "exportEncryptAll": "파일 전체 암호화(호스트·사용자 이름 포함, 내보내기 암호 필요)",
     "exportEncryptAllHint": "내보낸 파일에는 평문이 없습니다. 참고: 로컬 암호화를 켜면 .db를 복사해 기기를 이전할 수 없습니다. 암호화 내보내기/가져오기를 사용하세요.",
     "importEncryptedNote": "이 파일은 전체가 암호화되어 있습니다. 내보내기 암호를 입력하면 모든 내용을 가져옵니다.",
-    "section_lanSync": "LAN Sync"
+    "section_lanSync": "LAN Sync",
+    "accentValue": "강조 색상 {{color}}"
   },
   "shortcut": {
     "duplicateSession": "현재 세션 복제",

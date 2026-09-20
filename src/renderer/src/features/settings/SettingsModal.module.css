@@ -25,6 +25,7 @@
   width: 168px;
   flex: none;
   height: 100%;
+  overflow-y: auto;
   border-inline-end: 1px solid var(--ofs-border) !important;
   padding-top: 8px;
   background: color-mix(in srgb, var(--ofs-shell-surface) 88%, transparent);
@@ -35,6 +36,7 @@
   min-width: 0;
   overflow-y: auto;
   padding: 16px 20px 24px;
+  container-type: inline-size;
   background: var(--ofs-solid-surface);
 }
 
@@ -50,7 +52,7 @@
 }
 
 .rowLabel {
-  width: 210px;
+  width: 180px;
   flex: none;
   font-size: 13px;
   color: var(--ofs-text-1);
@@ -58,7 +60,7 @@
 
 .rowHint {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   line-height: 1.5;
   color: var(--ofs-text-3);
 }
@@ -68,6 +70,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .colorDot {
@@ -107,7 +111,7 @@
   border-radius: var(--ofs-radius-s);
   background: var(--ofs-solid-surface);
   font-family: ui-monospace, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   color: var(--ofs-text-2);
 }
 
@@ -139,7 +143,7 @@
 
 .importHint {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   line-height: 1.6;
   color: var(--ofs-text-3);
 }
@@ -177,14 +181,14 @@
 
 .aboutVersion {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   color: var(--ofs-text-3);
   font-variant-numeric: tabular-nums;
 }
 
 .aboutLicense {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   color: var(--ofs-text-3);
 }
 
@@ -197,7 +201,7 @@
   border-radius: var(--ofs-radius-m);
   background: var(--ofs-bg-subtle, transparent);
   font-family: ui-monospace, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   line-height: 1.6;
   color: var(--ofs-text-2);
 }
@@ -238,12 +242,22 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: ui-monospace, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   color: var(--ofs-text-3);
 }
 
 .refUsers {
   flex: none;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   color: var(--ofs-text-3);
+}
+
+@container (max-width: 440px) {
+  .row { flex-direction: column; gap: 8px; }
+  .rowLabel { width: auto; }
+  .rowControl { width: 100%; }
+}
+@media (max-width: 760px) {
+  .nav { width: 136px; }
+  .content { padding: 12px; }
 }

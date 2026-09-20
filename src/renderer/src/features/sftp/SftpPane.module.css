@@ -9,13 +9,14 @@
 }
 
 .toolbar {
+  flex-wrap: wrap;
   flex: none;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
   border-bottom: 1px solid var(--ofs-border);
-  background: var(--ofs-shell-surface);
+  background: var(--ofs-bg-panel);
 }
 
 .pathInput {
@@ -24,6 +25,7 @@
 }
 
 .breadcrumbBar {
+  min-width: 80px;
   flex: 1;
   min-width: 0;
   display: flex;

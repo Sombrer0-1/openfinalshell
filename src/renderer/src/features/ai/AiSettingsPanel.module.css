@@ -2,7 +2,7 @@
   padding: 16px;
   border: 1px solid var(--ofs-border);
   border-radius: var(--ofs-radius-m);
-  background: color-mix(in srgb, var(--ofs-solid-surface) 72%, transparent);
+  background: var(--ofs-bg-panel);
 }
 
 .editorHeader {
@@ -17,7 +17,7 @@
 .editorHint {
   display: block;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
 }
 
 .fieldGrid {
@@ -38,7 +38,7 @@
 
 .label {
   color: var(--ofs-text-2);
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   font-weight: 600;
 }
 
@@ -73,7 +73,7 @@
 .modelHint {
   display: block;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
 }
 
 .modelOption {

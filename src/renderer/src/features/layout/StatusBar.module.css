@@ -5,7 +5,7 @@
   align-items: center;
   gap: 16px;
   padding: 0 12px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   color: var(--ofs-text-2);
   background: var(--ofs-shell-surface);
   border-top: 1px solid var(--ofs-shell-border);
@@ -16,6 +16,9 @@
   align-items: center;
   gap: 5px;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dot {
@@ -34,6 +37,10 @@
 
 .clickable {
   cursor: pointer;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
   padding: 0 4px;
   border-radius: var(--ofs-platform-radius-s);
 }

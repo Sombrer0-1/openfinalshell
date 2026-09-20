@@ -731,7 +731,8 @@
     "exportEncryptAll": "整檔加密（連主機、使用者名稱也加密，需匯出口令）",
     "exportEncryptAllHint": "匯出檔案中沒有任何明文。注意：開啟本機加密後，換機不能再直接複製 .db 遷移，請用加密匯出／匯入。",
     "importEncryptedNote": "此檔案已整體加密，輸入匯出口令後將匯入其中全部內容。",
-    "section_lanSync": "LAN Sync"
+    "section_lanSync": "LAN Sync",
+    "accentValue": "強調色 {{color}}"
   },
   "shortcut": {
     "duplicateSession": "複製目前的工作階段",

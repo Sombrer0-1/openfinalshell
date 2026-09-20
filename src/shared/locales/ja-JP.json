@@ -731,7 +731,8 @@
     "exportEncryptAll": "ファイル全体を暗号化（ホスト・ユーザー名も含む、エクスポートパスフレーズが必要）",
     "exportEncryptAllHint": "エクスポートファイルには平文が含まれません。注意：ローカル暗号化を有効にすると、.db をコピーしての移行はできません。暗号化エクスポート／インポートを使用してください。",
     "importEncryptedNote": "このファイルはファイル全体が暗号化されています。エクスポートパスフレーズを入力すると、その全内容をインポートします。",
-    "section_lanSync": "LAN Sync"
+    "section_lanSync": "LAN Sync",
+    "accentValue": "アクセントカラー {{color}}"
   },
   "shortcut": {
     "duplicateSession": "現在のセッションを複製",

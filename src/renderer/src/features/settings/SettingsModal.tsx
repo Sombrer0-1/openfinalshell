@@ -145,7 +145,7 @@ export function SettingsModal(): React.JSX.Element {
       width={860}
       footer={null}
       onCancel={() => setOpen(false)}
-      styles={{ body: { padding: 0, height: 560 } }}
+      styles={{ body: { padding: 0, height: 'min(560px, calc(100dvh - 160px))' } }}
     >
       <div className={styles.wrap}>
         <Menu
@@ -170,7 +170,7 @@ export function SettingsModal(): React.JSX.Element {
             key,
             // 代理与私钥那一段的标题住在 savedRef.* 里（整段文案都在那儿），
             // 不为了凑 settings.section_* 的命名再复制一份
-            label: key === 'savedRef' ? t('savedRef.section') : key === 'ai' ? 'AI 助手' : t(`settings.section_${key}`)
+            label: key === 'savedRef' ? t('savedRef.section') : key === 'ai' ? t('aiAssistant.title') : t(`settings.section_${key}`)
           }))}
         />
 
@@ -235,7 +235,7 @@ export function SettingsModal(): React.JSX.Element {
               <Row label={t('settings.accent')}>
                 <Radio.Group value={settings.accent} onChange={(e) => set('accent', e.target.value)}>
                   {PRESET_COLORS.map((c) => (
-                    <Radio key={c} value={c}>
+                    <Radio key={c} value={c} aria-label={t('settings.accentValue', { color: c })} title={t('settings.accentValue', { color: c })}>
                       <span className={styles.colorDot} style={{ background: c }} />
                     </Radio>
                   ))}

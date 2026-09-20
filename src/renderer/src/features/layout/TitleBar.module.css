@@ -1,5 +1,7 @@
 .titleBar {
   height: var(--ofs-titlebar-height);
+  flex: none;
+  min-width: 0;
   display: flex;
   align-items: stretch;
   background: var(--ofs-shell-surface);
@@ -39,6 +41,8 @@
 }
 
 .tabStrip {
+  min-width: 0;
+  -webkit-app-region: no-drag;
   flex: 1;
   display: flex;
   align-items: flex-end;
@@ -53,6 +57,9 @@
 }
 
 .tab {
+  border: 1px solid transparent;
+  border-bottom: none;
+  transition: background var(--ofs-motion-fast), color var(--ofs-motion-fast);
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
@@ -70,7 +77,7 @@
 .tab:focus-visible,
 .newTabBtn:focus-visible,
 .tabClose:focus-visible {
-  outline: 2px solid var(--ofs-accent);
+  outline: 2px solid var(--ofs-platform-focus-ring);
   outline-offset: -2px;
 }
 .tab:hover {
@@ -126,6 +133,7 @@
   opacity: 0;
 }
 .tab:hover .tabClose,
+.tab:focus-within .tabClose,
 .tabActive .tabClose {
   opacity: 1;
 }

@@ -727,7 +727,8 @@
     "exportEncryptAll": "整文件加密（连主机、用户名也加密，需导出口令）",
     "exportEncryptAllHint": "导出文件中没有任何明文。注意：开启本地加密后，换机不能再直接拷 .db 迁移，请用加密导出/导入。",
     "importEncryptedNote": "此文件已整体加密，输入导出口令后将导入其中全部内容。",
-    "section_lanSync": "局域网同步"
+    "section_lanSync": "局域网同步",
+    "accentValue": "强调色 {{color}}"
   },
   "shortcut": {
     "duplicateSession": "复制当前会话",

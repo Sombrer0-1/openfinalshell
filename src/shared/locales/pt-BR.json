@@ -731,7 +731,8 @@
     "exportEncryptAll": "Criptografar o arquivo inteiro (incluindo hosts e nomes de usuário, requer senha de exportação)",
     "exportEncryptAllHint": "O arquivo exportado não contém texto sem criptografia. Observação: após ativar a criptografia local, não é possível migrar copiando o .db entre máquinas — use exportação/importação criptografada.",
     "importEncryptedNote": "Este arquivo está totalmente criptografado. Digite a senha de exportação para importar todo o conteúdo.",
-    "section_lanSync": "LAN Sync"
+    "section_lanSync": "LAN Sync",
+    "accentValue": "Cor de destaque {{color}}"
   },
   "shortcut": {
     "duplicateSession": "Duplicar a sessão atual",

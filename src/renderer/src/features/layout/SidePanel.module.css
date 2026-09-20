@@ -15,11 +15,10 @@
   justify-content: space-between;
   min-height: 40px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: var(--ofs-text-heading);
   font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--ofs-text-2);
+  color: var(--ofs-text-1);
+  border-bottom: 1px solid var(--ofs-border-faint);
 }
 
 .content {

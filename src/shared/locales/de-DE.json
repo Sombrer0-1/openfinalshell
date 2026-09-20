@@ -731,7 +731,8 @@
     "exportEncryptAll": "Gesamte Datei verschlüsseln (auch Hosts und Benutzernamen, Export-Passphrase erforderlich)",
     "exportEncryptAllHint": "Die exportierte Datei enthält keinen Klartext. Hinweis: Nach Aktivierung der lokalen Verschlüsselung ist keine Migration durch Kopieren der .db mehr möglich – nutzen Sie verschlüsselten Export/Import.",
     "importEncryptedNote": "Diese Datei ist vollständig verschlüsselt. Geben Sie die Export-Passphrase ein, um den gesamten Inhalt zu importieren.",
-    "section_lanSync": "LAN Sync"
+    "section_lanSync": "LAN Sync",
+    "accentValue": "Akzentfarbe {{color}}"
   },
   "shortcut": {
     "duplicateSession": "Aktuelle Sitzung duplizieren",

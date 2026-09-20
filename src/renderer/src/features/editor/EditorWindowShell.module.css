@@ -1,6 +1,6 @@
 .host {
   position: relative;
-  height: 100vh;
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -65,6 +65,8 @@
 }
 
 .tab {
+  min-height: 32px;
+  transition: background var(--ofs-motion-fast), color var(--ofs-motion-fast);
   flex: none;
   display: flex;
   align-items: center;
@@ -73,7 +75,7 @@
   padding: 4px 8px;
   border: 1px solid transparent;
   border-bottom: none;
-  border-radius: var(--ofs-radius-m) var(--ofs-radius-m) 0 0;
+  border-radius: var(--ofs-platform-radius-m) var(--ofs-platform-radius-m) 0 0;
   font-size: 12px;
   color: var(--ofs-text-2);
   cursor: pointer;
@@ -135,7 +137,7 @@
 
 .tabClose {
   flex: none;
-  opacity: 0.45;
+  opacity: 1;
   border-radius: var(--ofs-radius-s);
 }
 .tabClose:hover {
@@ -198,7 +200,7 @@
   padding: 2px 8px;
   border-top: 1px solid var(--ofs-border);
   background: var(--ofs-bg-panel);
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   color: var(--ofs-text-2);
   /* 信息多、地方小：一律不换行，路径那一段自己截断 */
   white-space: nowrap;
@@ -231,7 +233,7 @@
 .statusTag {
   flex: none;
   margin: 0;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
   line-height: 16px;
   padding: 0 5px;
 }
@@ -239,7 +241,7 @@
 .charset {
   flex: none;
   min-width: 84px;
-  font-size: 11px;
+  font-size: var(--ofs-text-caption);
 }
 
 /* ---- 确认框里的那几行 ---- */
