@@ -17,6 +17,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.30.31',
+    items: [
+      { type: 'feat', zh: '统一桌面深浅主题、欢迎页、侧栏、设置和独立编辑器的视觉样式，改善八种强调色的文字对比度，并适配减少动效、减少透明度和高对比度偏好', en: 'Unify the desktop light and dark themes, welcome page, sidebars, settings and independent editor; improve text contrast for all eight accent colors and respect reduced motion, reduced transparency and high contrast preferences' },
+      { type: 'feat', zh: '统一终端、文件管理、传输和监控工具栏的基础控件，补齐图标按钮的可访问名称、键盘操作及加载反馈', en: 'Unify basic controls across terminal, file, transfer and monitoring toolbars, with accessible icon button names, keyboard operation and loading feedback' },
+      { type: 'fix', zh: '修复小窗口和 150% 界面缩放下设置弹窗、连接编辑抽屉超出可视区域的问题，使内容可滚动且主要操作保持可达', en: 'Fix settings dialogs and connection drawers extending beyond small windows at 150% UI zoom, keeping content scrollable and primary actions reachable' }
+    ]
+  },
+  {
     version: '0.30.30',
     items: [
       { type: 'fix', zh: '修复 Android 本地终端 root 档在 Shizuku 未授权本应用时谎报可用、连上后卡住约 15 秒再报失败：在 Shizuku 以 root 运行的设备上该档走的就是 Shizuku user service，同样需要授权，现在会如实降级并在卡片上直接给出授权入口；终端顶部的会话标识对本地会话改为显示它自己的名字（v0.30.29 的更新说明里写过，但改动当时漏了提交，这一版才真正带上）', en: 'Fix the Android local terminal\'s root tier reporting itself available when Shizuku has not granted the app, then hanging for about 15 seconds before failing — on a device where Shizuku runs as root that tier is served by a Shizuku user service and needs the same grant, so it now downgrades honestly and offers the grant action on the card; the session label above the terminal now shows a local session\'s own name (announced in the 0.30.29 notes, but the change had not been committed and so ships here)' }
