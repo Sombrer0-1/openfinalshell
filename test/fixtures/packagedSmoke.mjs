@@ -31,10 +31,11 @@ const fail = (msg) => {
 
 let app
 let ws
+const sockets = []
 let dataDir
 function cleanup() {
   try {
-    ws?.close()
+    for (const socket of sockets) socket.close()
   } catch {
     /* ignore */
   }
@@ -82,6 +83,52 @@ async function evaluate(expression) {
   return result.result.value
 }
 
+// Isolated profiles show onboarding, including after a renderer reload in this process.
+// Dismiss through the UI so native pointer checks do not run behind its modal mask.
+async function dismissStartupNotice() {
+  await send('Page.bringToFront')
+  const dismissed = await evaluate(`
+    for (let i = 0; i < 40; i++) {
+      const modal = [...document.querySelectorAll('.ant-modal')].find(m =>
+        m.querySelector('.ant-modal-title')?.textContent.includes('欢迎使用 OpenFinalShell'))
+      const button = modal?.querySelector('.ant-modal-footer .ant-btn-primary')
+      if (button) {
+        button.click()
+        for (let j = 0; j < 40; j++) {
+          await new Promise(r => setTimeout(r, 50))
+          if (!modal.isConnected || modal.getBoundingClientRect().height === 0) return true
+        }
+        return false
+      }
+      await new Promise(r => setTimeout(r, 100))
+    }
+    return false
+  `)
+  if (!dismissed) fail('首次启动引导未关闭，后续鼠标检查会被模态遮罩拦截')
+}
+
+async function connectTarget(target) {
+  const socket = new WebSocket(target.webSocketDebuggerUrl)
+  sockets.push(socket)
+  await new Promise((resolve, reject) => {
+    socket.addEventListener('open', resolve, { once: true })
+    socket.addEventListener('error', () => reject(new Error('CDP websocket 连接失败')), { once: true })
+  })
+  socket.addEventListener('message', (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id)
+      pending.delete(msg.id)
+      if (msg.error) reject(new Error(msg.error.message))
+      else resolve(msg.result)
+    } else if (msg.method === 'Runtime.consoleAPICalled') {
+      const text = (msg.params.args ?? []).map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 300)
+      consoleLog.push({ level: msg.params.type, text })
+    }
+  })
+  return socket
+}
+
 async function main() {
   console.log(`launching ${exePath} (cdp ${cdpPort})`)
   // 独立 user-data-dir：① 单实例锁按 userData 路径算，这样能与正在使用的实例并存；
@@ -115,35 +162,9 @@ async function main() {
   if (!target) fail('CDP page target 未就绪（应用可能启动失败）')
   console.log(`OK app launched, page title = ${JSON.stringify(target.title)}`)
 
-  ws = new WebSocket(target.webSocketDebuggerUrl)
-  await new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true })
-    ws.addEventListener('error', () => reject(new Error('CDP websocket 连接失败')), { once: true })
-  })
-  ws.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data)
-    if (msg.id && pending.has(msg.id)) {
-      const { resolve, reject } = pending.get(msg.id)
-      pending.delete(msg.id)
-      if (msg.error) reject(new Error(msg.error.message))
-      else resolve(msg.result)
-      return
-    }
-    /*
-     * 收集渲染进程的 console。
-     *
-     * 有一整类问题只在这里现形：CodeMirror 对认不出来的高亮标签打 console.warn，
-     * 而那意味着"这一类词在编辑器里永远没有颜色"—— 界面看着能用、构建全绿、
-     * 类型检查也过。不收集的话，这个信号在打包产物里就彻底看不见了。
-     */
-    if (msg.method === 'Runtime.consoleAPICalled') {
-      const text = (msg.params.args ?? [])
-        .map((a) => a.value ?? a.description ?? '')
-        .join(' ')
-        .slice(0, 300)
-      consoleLog.push({ level: msg.params.type, text })
-    }
-  })
+  // Both windows contribute console diagnostics (CSP and unknown CM highlight tags).
+  ws = await connectTarget(target)
+  const mainWs = ws
   await send('Runtime.enable')
 
   // ---- 通用输入助手（编辑器与命令历史两步共用；放这里是因为 const 有 TDZ，
@@ -199,6 +220,7 @@ async function main() {
 
   const versions = await evaluate(`return await window.ofs.invoke('app:getVersions')`)
   console.log(`OK versions: app=${versions.app} electron=${versions.electron} node=${versions.node}`)
+  await dismissStartupNotice()
 
   const vaultOk = await evaluate(`return await window.ofs.invoke('vault:isAvailable')`)
   console.log(`OK safeStorage available = ${vaultOk}`)
@@ -316,7 +338,7 @@ async function main() {
     const hits = covered('主界面')
     // 连接编辑抽屉贴着窗口右上角，是最容易撞上的一处
     const openBtn = [...document.querySelectorAll('button[title]')].find(
-      (b) => b.title === '新建连接' && b.className.includes('ant-btn')
+      (b) => b.getAttribute('aria-label') === '新建连接' && b.closest('aside')
     )
     let checkedDrawer = false
     if (openBtn) {
@@ -364,7 +386,7 @@ async function main() {
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }
     const openBtn = [...document.querySelectorAll('button[title]')].find(
-      (b) => b.title === '新建连接' && b.className.includes('ant-btn')
+      (b) => b.getAttribute('aria-label') === '新建连接' && b.closest('aside')
     )
     if (!openBtn) return { error: '没找到新建连接按钮' }
     openBtn.click()
@@ -453,6 +475,7 @@ async function main() {
   `)
   await evaluate('location.reload(); return true').catch(() => {})
   await sleep(4000)
+  await dismissStartupNotice()
 
   // 无 Secret Service 时密码不会持久化；reload 后监听器也没了，必须再次应答。
   if (!vaultOk) {
@@ -525,7 +548,7 @@ async function main() {
   const autoOpen = await evaluate(`
     const sftpOpen = () => Boolean(document.querySelector('[class*=breadcrumbBar]'))
     const monitorOpen = () =>
-      [...document.querySelectorAll('[class*=header]')].some((n) =>
+      [...document.querySelectorAll('header')].some((n) =>
         n.textContent.trim().startsWith('服务器监控')
       )
     for (let i = 0; i < 40; i++) {
@@ -595,7 +618,7 @@ async function main() {
   // 真的处在原生窗口按钮的水平范围内，监控面板占着右侧 14–40% 时它并不在，
   // 那条检查就会静默失去约束力（8.6 里有专门的反空转断言会把这件事挑明）。
   const monitorClosed = await evaluate(`
-    const head = [...document.querySelectorAll('[class*=header]')].find((n) =>
+    const head = [...document.querySelectorAll('header')].find((n) =>
       n.textContent.trim().startsWith('服务器监控')
     )
     if (!head) return { error: '找不到监控面板头部' }
@@ -604,7 +627,7 @@ async function main() {
     btns[btns.length - 1].click()   // 最后一个是关闭
     await new Promise((r) => setTimeout(r, 900))
     return {
-      监控已关闭: ![...document.querySelectorAll('[class*=header]')].some((n) =>
+      监控已关闭: ![...document.querySelectorAll('header')].some((n) =>
         n.textContent.trim().startsWith('服务器监控')
       ),
       仍然ready: document.querySelectorAll('[class*=dotReady]').length > 0
@@ -1144,6 +1167,11 @@ async function main() {
         await moveTo(p.cx, p.cy)
         const m = await evaluate(`return await window.__ofsTip.measure(${JSON.stringify(p.id)})`)
         if (m) measured.push(m)
+        else console.log('Tooltip not visible', p, await evaluate(`return {
+          hit: document.elementFromPoint(${p.cx}, ${p.cy})?.closest('button')?.outerHTML,
+          tip: window.__ofsTip.tipOf(${JSON.stringify(p.id)})?.closest('.ant-tooltip')?.outerHTML,
+          focus: document.hasFocus()
+        }`))
         await moveTo(tipEnv.park.x, tipEnv.park.y)
         leftover = Math.max(leftover, await evaluate(`return await window.__ofsTip.waitGone(${JSON.stringify(p.id)})`))
       }
@@ -2089,7 +2117,7 @@ async function main() {
   if (!edUpload.ok) fail('编辑器样本文件没能传上去，后面几步无从验证')
 
   // 右键那一行 → 「内置编辑器查看」
-  const edOpen = await evaluate(`
+  const edMenu = await evaluate(`
     const sid = '${session.sessionId}'
     document.querySelector('.ant-drawer-open .ant-drawer-close')?.click()
     await new Promise((s) => setTimeout(s, 400))
@@ -2118,7 +2146,25 @@ async function main() {
     if (!view) return { error: '右键菜单里没有「内置编辑器查看」', 菜单: items.map((e) => e.textContent.trim()) }
     if (view.className.includes('-disabled')) return { error: '「内置编辑器查看」对一个普通文件是灰的' }
     view.click()
+    return { ok: true }
+  `)
+  if (edMenu.error) fail(`${edMenu.error}${edMenu.菜单 ? `（菜单：${JSON.stringify(edMenu.菜单)}）` : ''}`)
 
+  // The editor lives in a separate BrowserWindow. Querying the main window's DOM
+  // would always report a missing CodeMirror despite a successful menu action.
+  let editorTarget = null
+  for (let i = 0; i < 40 && !editorTarget; i++) {
+    await sleep(250)
+    const targets = await fetch(`http://127.0.0.1:${cdpPort}/json/list`).then((r) => r.json())
+    editorTarget = targets.find((t) => t.type === 'page' && t.url.includes('#/editor'))
+  }
+  if (!editorTarget) fail('右键打开文件后独立编辑器窗口没有出现')
+  ws = await connectTarget(editorTarget)
+  await send('Runtime.enable')
+  await send('Page.bringToFront')
+  console.log('OK 右键打开文件进入独立编辑器窗口')
+
+  const edOpen = await evaluate(`
     // 等 CM 起来并渲染出行
     for (let i = 0; i < 60; i++) {
       if (document.querySelectorAll('.cm-editor .cm-line').length >= 5) break
@@ -2591,7 +2637,7 @@ async function main() {
   }
   console.log('OK 两次确认之后内容真的写上去了')
 
-  // 关掉标签 → 那一格应该整个消失（它没有开关，全关掉就是关闭）
+  // 关掉最后一个文件标签，代码区退出，独立窗口保留空状态。
   const edClose = await evaluate(`
     const close = document.querySelector('[class*=tabClose]')
     if (!close) return { error: '找不到文件标签上的关闭按钮' }
@@ -2602,8 +2648,10 @@ async function main() {
     return { 还在: Boolean(document.querySelector('.cm-editor')) }
   `)
   if (edClose.error) fail(edClose.error)
-  if (edClose.还在) fail('关掉唯一的文件标签之后，编辑器那一格还占着版面')
-  console.log('OK 关掉最后一个文件标签，编辑器那一格随之消失')
+  if (edClose.还在) fail('关掉唯一的文件标签之后，CodeMirror 仍未退出')
+  console.log('OK 关掉最后一个文件标签，独立编辑器退出代码区')
+  ws = mainWs
+  await send('Page.bringToFront')
   rmSync(edLocal, { force: true })
   }
 

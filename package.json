@@ -25,6 +25,7 @@
     "package:linux:arm64": "npm run build:rdp-worker -- --platform linux --arch arm64 --require-freerdp && npm run check:rdp-worker -- --platform linux --arch arm64 --require-freerdp && electron-vite build && electron-builder --linux deb rpm AppImage --arm64 --publish never && npm run check:rdp-worker -- --platform linux --arch arm64 --app-dir release/linux-arm64-unpacked --require-freerdp",
     "package:dir": "npm run build:rdp-worker -- --platform win --arch x64 --require-freerdp && npm run check:rdp-worker -- --platform win --arch x64 --require-freerdp && electron-vite build && electron-builder --win --x64 --dir --publish never && npm run check:rdp-worker -- --platform win --arch x64 --app-dir release/win-unpacked --require-freerdp",
     "smoke:packaged": "node test/fixtures/packagedSmoke.mjs",
+    "smoke:ui": "node scripts/uiSmoke.mjs",
     "smoke:multi-instance": "node test/fixtures/multiInstanceSmoke.mjs",
     "postinstall": "electron-builder install-app-deps",
     "check:bundle": "node scripts/checkBundleBudget.mjs",
