@@ -758,7 +758,8 @@
     "close": "Fermer",
     "retry": "Réessayer",
     "panelCrashed": "Ce panneau a planté",
-    "reload": "Recharger"
+    "reload": "Recharger",
+    "loading": "Chargement…"
   },
   "region": {
     "lan": "LAN",

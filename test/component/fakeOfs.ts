@@ -68,6 +68,11 @@ class FakeOfs {
   }
 
   /** 模拟 main → renderer 事件 */
+  listenerCount(): number {
+    return [...this.listeners.values()].reduce((count, listeners) => count + listeners.size, 0)
+  }
+
+  /** 模拟 main → renderer 事件 */
   emit(channel: string, payload: unknown): void {
     for (const cb of this.listeners.get(channel) ?? []) cb(payload)
   }

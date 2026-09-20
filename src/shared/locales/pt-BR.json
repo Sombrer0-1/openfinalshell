@@ -758,7 +758,8 @@
     "close": "Fechar",
     "retry": "Tentar novamente",
     "panelCrashed": "Este painel travou",
-    "reload": "Recarregar"
+    "reload": "Recarregar",
+    "loading": "Carregando…"
   },
   "region": {
     "lan": "LAN",

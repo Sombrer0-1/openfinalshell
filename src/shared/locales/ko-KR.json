@@ -758,7 +758,8 @@
     "close": "닫기",
     "retry": "다시 시도",
     "panelCrashed": "이 패널이 충돌했습니다",
-    "reload": "다시 불러오기"
+    "reload": "다시 불러오기",
+    "loading": "불러오는 중…"
   },
   "region": {
     "lan": "LAN",

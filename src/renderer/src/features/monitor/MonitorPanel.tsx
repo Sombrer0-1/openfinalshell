@@ -1,5 +1,6 @@
+import { IconButton, PanelHeading } from '@/components/ui'
 import { useEffect, useState } from 'react'
-import { Button, Empty } from 'antd'
+import { Empty } from 'antd'
 import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { MonitorSnapshot } from '@shared/types'
@@ -30,15 +31,15 @@ function usageColor(pct: number, accent: string): string {
 
 /** 延迟分档配色：<100 绿 / <200 黄 / 其余红（对齐 FinalShell 肌肉记忆） */
 function latencyColor(ms: number): string {
-  if (ms < 100) return '#52c41a'
-  if (ms < 200) return '#faad14'
-  return '#ff4d4f'
+  if (ms < 100) return 'var(--ofs-success)'
+  if (ms < 200) return 'var(--ofs-warning)'
+  return 'var(--ofs-error)'
 }
 
 export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
   const { t } = useTranslation()
   const settings = useSettingsStore((s) => s.settings)!
-  const accent = settings.accent
+  const accent = 'var(--ofs-accent)'
   const sessionId = tab.sessionId
   const snapshot = useMonitorStore((s) => (sessionId ? s.latest[sessionId] : undefined))
   const staticInfo = useMonitorStore((s) => (sessionId ? s.staticInfo[sessionId] : undefined))
@@ -63,22 +64,18 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
   void snapshot?.ts // 依赖锚点：每来一帧本组件重渲染，下面几张图跟着重画
 
   const header = (
-    <div className={styles.header}>
-      <span>{t('monitor.title')}</span>
-      <span style={{ display: 'flex', gap: 2 }}>
+    <PanelHeading title={t('monitor.title')} actions={<>
         {state === 'failed' && (
           <TitlebarSafeTooltip title={t('common.retry')}>
-            <Button
+            <IconButton label={t('common.retry')}
               size="small"
-              type="text"
               icon={<RefreshCw size={13} strokeWidth={1.75} />}
               onClick={() => sessionId && void start(sessionId, settings.monitor.intervalMs)}
             />
           </TitlebarSafeTooltip>
         )}
-        <Button size="small" type="text" icon={<X size={13} strokeWidth={1.75} />} onClick={onClose} />
-      </span>
-    </div>
+        <IconButton label={t('common.close')} size="small" icon={<X size={13} strokeWidth={1.75} />} onClick={onClose} />
+      </>} />
   )
 
   if (state === 'unsupported') {

@@ -117,6 +117,7 @@ export function useAppLanguage(settings: AppSettings | null): {
 export function useUiZoom(settings: AppSettings | null): void {
   useEffect(() => {
     const zoom = (settings?.uiZoom ?? 100) / 100
+    document.documentElement.style.setProperty('--ofs-ui-zoom', String(zoom))
     document.documentElement.style.setProperty('zoom', String(zoom))
   }, [settings?.uiZoom])
 }

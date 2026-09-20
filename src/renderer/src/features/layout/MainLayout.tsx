@@ -72,7 +72,7 @@ export function MainLayout({ uiMode }: Props): React.JSX.Element {
               </>
             )}
             <Panel id="main" order={2}>
-              <div className={styles.mainArea}>
+              <main className={styles.mainArea} tabIndex={-1}>
                 <ErrorBoundary label="main-area">
                   {tabs.length === 0 ? (
                     <WelcomePage />
@@ -80,7 +80,7 @@ export function MainLayout({ uiMode }: Props): React.JSX.Element {
                     <SessionViewHost tabs={tabs} activeTabId={activeTabId} uiMode={uiMode} />
                   )}
                 </ErrorBoundary>
-              </div>
+              </main>
             </Panel>
             {activeTab?.monitorOpen && (
               <>

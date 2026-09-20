@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { App as AntdApp, Button, Input } from 'antd'
+import { App as AntdApp, Input } from 'antd'
+import { ActionCard, SurfaceCard, UiButton, EmptyState } from '@/components/ui'
 import { History, Plug, Rocket, Server } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ProfileDraft } from '@shared/types'
@@ -85,8 +86,7 @@ export function WelcomePage(): React.JSX.Element {
       <h1 className={styles.title}>{t('welcome.title')}</h1>
       <p className={styles.subtitle}>{t('welcome.subtitle')}</p>
       <div className={styles.cards}>
-        <button
-          type="button"
+        <ActionCard
           className={`${styles.card} ${styles.cardPrimary}`}
           onClick={() => setEditingProfile('new')}
         >
@@ -95,9 +95,9 @@ export function WelcomePage(): React.JSX.Element {
             {t('welcome.newConnection')}
           </div>
           <div className={styles.cardDesc}>{t('welcome.newConnectionDesc')}</div>
-        </button>
+        </ActionCard>
 
-        <section className={styles.card} aria-labelledby="welcome-quick-connect">
+        <SurfaceCard className={styles.card} aria-labelledby="welcome-quick-connect">
           <div className={styles.cardTitle}>
             <Rocket size={16} strokeWidth={1.75} />
             <span id="welcome-quick-connect">{t('welcome.quickConnect')}</span>
@@ -116,30 +116,30 @@ export function WelcomePage(): React.JSX.Element {
               onPressEnter={() => void doQuickConnect()}
               disabled={quickConnecting}
             />
-            <Button
-              type="primary"
+            <UiButton
+              variant="primary"
               loading={quickConnecting}
               disabled={!quick.trim()}
               onClick={() => void doQuickConnect()}
             >
               {t('welcome.quickConnect')}
-            </Button>
+            </UiButton>
           </div>
           {quickError && (
             <div className={styles.cardError} role="alert">
               {quickError}
             </div>
           )}
-        </section>
+        </SurfaceCard>
 
-        <section className={styles.card} aria-labelledby="welcome-recent">
+        <SurfaceCard className={styles.card} aria-labelledby="welcome-recent">
           <div className={styles.cardTitle}>
             <History size={16} strokeWidth={1.75} />
             <span id="welcome-recent">{t('welcome.recent')}</span>
           </div>
           <div className={styles.cardDesc}>
             {recent.length === 0 ? (
-              t('welcome.noRecent')
+              <EmptyState title={t('welcome.noRecent')} icon={<History size={20} aria-hidden="true" />} />
             ) : (
               <div className={styles.recentList}>
                 {recent.map((p) => (
@@ -170,7 +170,7 @@ export function WelcomePage(): React.JSX.Element {
               </div>
             )}
           </div>
-        </section>
+        </SurfaceCard>
       </div>
     </div>
   )

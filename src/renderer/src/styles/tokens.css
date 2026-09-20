@@ -33,4 +33,7 @@
   --ofs-motion-fast: 120ms;
   --ofs-motion-normal: 180ms;
   --ofs-ease: cubic-bezier(.2, .8, .2, 1);
+  --ofs-ui-zoom: 1;
+  --ofs-viewport-width: calc(100vw / var(--ofs-ui-zoom));
+  --ofs-viewport-height: calc(100dvh / var(--ofs-ui-zoom));
 }

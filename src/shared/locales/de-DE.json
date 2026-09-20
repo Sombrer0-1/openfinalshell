@@ -758,7 +758,8 @@
     "close": "Schließen",
     "retry": "Erneut versuchen",
     "panelCrashed": "Dieser Bereich ist abgestürzt",
-    "reload": "Neu laden"
+    "reload": "Neu laden",
+    "loading": "Wird geladen…"
   },
   "region": {
     "lan": "LAN",

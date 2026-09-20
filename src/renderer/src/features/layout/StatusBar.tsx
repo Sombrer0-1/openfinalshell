@@ -56,13 +56,13 @@ export function StatusBar(): React.JSX.Element {
       <span className={styles.spacer} />
 
       {running.length > 0 && (
-        <span className={`${styles.item} ${styles.clickable} tabular-nums`} onClick={() => setDrawerOpen(true)}>
+        <button type="button" className={`${styles.item} ${styles.clickable} tabular-nums`} onClick={() => setDrawerOpen(true)}>
           <ArrowDown size={11} strokeWidth={2} />
           {formatSpeed(downSpeed)}
           <ArrowUp size={11} strokeWidth={2} />
           {formatSpeed(upSpeed)}
           <span>· {t('transfer.runningCount', { count: running.length })}</span>
-        </span>
+        </button>
       )}
       {profile && <span className={styles.item}>{profile.terminal.charset.toUpperCase()}</span>}
       {versions && (
@@ -72,6 +72,14 @@ export function StatusBar(): React.JSX.Element {
          * 再冒一个"有新版"的浮层只会盖住用户正在看的东西。
          */
         <span
+          role={ready ? 'button' : undefined}
+          tabIndex={ready ? 0 : undefined}
+          onKeyDown={(event) => {
+            if (ready && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault()
+              setSettingsOpen(true)
+            }
+          }}
           className={`${styles.item} tabular-nums ${ready ? styles.clickable : ''}`}
           onClick={ready ? () => setSettingsOpen(true) : undefined}
           title={

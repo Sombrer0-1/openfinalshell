@@ -1,12 +1,10 @@
+import { IconButton, EmptyState, LoadingState, UiButton } from '@/components/ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   App as AntdApp,
-  Button,
   Dropdown,
-  Empty,
   Input,
-  Skeleton,
   Table,
   Tooltip,
   type MenuProps,
@@ -1006,7 +1004,7 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
     return (
       <div className={styles.pane}>
         <div className={styles.emptyWrap}>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('sftp.waitingSession')} />
+          <EmptyState title={t('sftp.waitingSession')} />
         </div>
       </div>
     )
@@ -1038,9 +1036,8 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
     >
       <div className={styles.toolbar}>
         <Tooltip title={t('sftp.back')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={t('sftp.back')}
+              size="small"
             disabled={history.index <= 0}
             icon={<ArrowLeft size={14} strokeWidth={1.75} />}
             onClick={() => {
@@ -1051,9 +1048,8 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
           />
         </Tooltip>
         <Tooltip title={t('sftp.forward')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={t('sftp.forward')}
+              size="small"
             disabled={history.index >= history.stack.length - 1}
             icon={<ArrowRight size={14} strokeWidth={1.75} />}
             onClick={() => {
@@ -1064,17 +1060,15 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
           />
         </Tooltip>
         <Tooltip title={t('sftp.up')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={t('sftp.up')}
+              size="small"
             icon={<ArrowUp size={14} strokeWidth={1.75} />}
             onClick={() => void load(parentOf(cwd))}
           />
         </Tooltip>
         <Tooltip title={t('sftp.refresh')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={t('sftp.refresh')}
+              size="small"
             icon={<RefreshCw size={14} strokeWidth={1.75} />}
             onClick={() => void load(cwd, false)}
           />
@@ -1116,9 +1110,8 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
         {/* 换目录途中禁掉三个写入口：此刻 cwd 还是上一个目录，
             在这里新建/上传会把东西落在用户已经离开的目录里（cd 打错时更明显） */}
         <Tooltip title={t('sftp.newFolder')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={t('sftp.newFolder')}
+              size="small"
             disabled={navPending}
             icon={<FolderPlus size={14} strokeWidth={1.75} />}
             onClick={() => promptNewEntry('dir')}
@@ -1128,27 +1121,24 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
             插一个"点开才有内容"的下拉是唯一的异类；而合成一个对话框做不到
             （见 pickAndUpload 上的说明） */}
         <Tooltip title={t('sftp.uploadFile')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={t('sftp.uploadFile')}
+              size="small"
             disabled={navPending}
             icon={<Upload size={14} strokeWidth={1.75} />}
             onClick={() => void pickAndUpload('file')}
           />
         </Tooltip>
         <Tooltip title={t('sftp.uploadFolder')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={t('sftp.uploadFolder')}
+              size="small"
             disabled={navPending}
             icon={<FolderUp size={14} strokeWidth={1.75} />}
             onClick={() => void pickAndUpload('folder')}
           />
         </Tooltip>
         <Tooltip title={showHidden ? t('sftp.hideHidden') : t('sftp.showHidden')}>
-          <Button
-            size="small"
-            type="text"
+          <IconButton label={showHidden ? t('sftp.hideHidden') : t('sftp.showHidden')}
+              size="small"
             icon={
               showHidden ? <Eye size={14} strokeWidth={1.75} /> : <EyeOff size={14} strokeWidth={1.75} />
             }
@@ -1171,29 +1161,19 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
       >
         {error ? (
           <div className={styles.emptyWrap}>
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <span>
-                  {error}
-                  <br />
-                  {/* 重试的是失败的那个目录，不是脚下这个（脚下这个本来就是好的） */}
-                  <a onClick={() => void load(errorDirRef.current ?? cwd, false)}>
-                    {t('common.retry')}
-                  </a>
-                </span>
-              }
-            />
+            <EmptyState title={error} tone="error" action={
+              <UiButton size="small" onClick={() => void load(errorDirRef.current ?? cwd, false)}>{t('common.retry')}</UiButton>
+            } />
           </div>
         ) : navPending ? (
           /*
            * 换目录途中的骨架。用它**替代** <Table> 而不是盖在上面，是因为这样
            * 行上的双击/拖放/右键、以及 rowSelection 全部自动失活 —— 不用逐个加守卫，
            * 也就不会漏掉某一个入口去操作一个还没确认存在的目录里的旧条目。
-           * 刻意不放任何文案：一是无需新增 10 份 locale，二是"骨架"本身就已经在说"在读了"。
+           * 骨架不持续播放动画，读屏通过本地化的 status 得知加载状态。
            */
           <div className={styles.skeletonWrap} aria-busy>
-            <Skeleton active title={false} paragraph={{ rows: 6, width: '100%' }} />
+            <LoadingState label={t('common.loading')} rows={6} />
           </div>
         ) : (
           <Table<SftpEntry>

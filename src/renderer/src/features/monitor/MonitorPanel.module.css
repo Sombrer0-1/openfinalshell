@@ -7,21 +7,6 @@
   overflow: hidden;
 }
 
-.header {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 36px;
-  padding: 0 8px 0 12px;
-  font-size: var(--ofs-text-caption);
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--ofs-text-2);
-  border-bottom: 1px solid var(--ofs-shell-border);
-  background: var(--ofs-bg-panel);
-}
 
 .body {
   flex: 1;

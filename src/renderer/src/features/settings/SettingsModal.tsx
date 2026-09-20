@@ -145,7 +145,7 @@ export function SettingsModal(): React.JSX.Element {
       width={860}
       footer={null}
       onCancel={() => setOpen(false)}
-      styles={{ body: { padding: 0, height: 'min(560px, calc(100dvh - 160px))' } }}
+      styles={{ body: { padding: 0, height: 'min(560px, calc(var(--ofs-viewport-height) - 160px))' } }}
     >
       <div className={styles.wrap}>
         <Menu

@@ -754,7 +754,8 @@
     "close": "Close",
     "retry": "Retry",
     "panelCrashed": "This panel crashed",
-    "reload": "Reload"
+    "reload": "Reload",
+    "loading": "Loading…"
   },
   "region": {
     "lan": "LAN",

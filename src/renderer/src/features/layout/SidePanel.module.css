@@ -8,18 +8,6 @@
   overflow: hidden;
 }
 
-.header {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 40px;
-  padding: 0 12px;
-  font-size: var(--ofs-text-heading);
-  font-weight: 600;
-  color: var(--ofs-text-1);
-  border-bottom: 1px solid var(--ofs-border-faint);
-}
 
 .content {
   flex: 1;

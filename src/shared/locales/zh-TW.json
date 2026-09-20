@@ -758,7 +758,8 @@
     "close": "關閉",
     "retry": "重試",
     "panelCrashed": "此面板已當機",
-    "reload": "重新載入"
+    "reload": "重新載入",
+    "loading": "載入中…"
   },
   "region": {
     "lan": "區域網路",

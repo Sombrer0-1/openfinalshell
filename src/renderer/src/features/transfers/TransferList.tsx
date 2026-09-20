@@ -1,5 +1,6 @@
+import { IconButton, EmptyState, StatusBadge } from '@/components/ui'
 import { useMemo } from 'react'
-import { App as AntdApp, Button, Empty, Progress, Tooltip } from 'antd'
+import { App as AntdApp, Button, Progress, Tooltip } from 'antd'
 import {
   ArrowDown,
   ArrowUp,
@@ -114,11 +115,7 @@ export function TransferList({ compact = false }: { compact?: boolean }): React.
 
   if (tasks.length === 0) {
     return (
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description={t('sidebar.emptyTransfers')}
-        style={{ marginTop: 40 }}
-      />
+      <EmptyState title={t('sidebar.emptyTransfers')} />
     )
   }
 
@@ -312,9 +309,8 @@ function GroupRow({
         )}
         {live && (
           <Tooltip title={t('transfer.cancelGroup')}>
-            <Button
+            <IconButton label={t('transfer.cancelGroup')}
               size="small"
-              type="text"
               danger
               icon={<X size={13} strokeWidth={1.75} />}
               onClick={() => onControl('cancel')}
@@ -323,9 +319,8 @@ function GroupRow({
         )}
         {task.state === 'error' && (
           <Tooltip title={t('common.retry')}>
-            <Button
+            <IconButton label={t('common.retry')}
               size="small"
-              type="text"
               icon={<RotateCcw size={13} strokeWidth={1.75} />}
               onClick={() => onControl('retry')}
             />
@@ -345,7 +340,7 @@ function GroupRow({
           {formatBytes(group.transferred)} / {formatBytes(group.bytes)}
           {group.unknownCount > 0 && '+'}
         </span>
-        <span className={styles.itemState}>{t(GROUP_STATE_KEY[group.state])}</span>
+        <span className={styles.itemState}><StatusBadge tone={group.state === 'done' ? 'success' : group.state === 'partial' ? 'warning' : 'neutral'}>{t(GROUP_STATE_KEY[group.state])}</StatusBadge></span>
       </div>
     </div>
   )
@@ -394,9 +389,11 @@ function TaskRow({
           </Tooltip>
         )}
         <span className={styles.itemState}>
+          <StatusBadge tone={task.state === 'error' ? 'error' : task.state === 'done' ? 'success' : task.state === 'paused' ? 'warning' : 'neutral'}>
           {task.phase && task.state === 'running'
             ? t(PHASE_KEY[task.phase])
             : t(STATE_KEY[task.state])}
+          </StatusBadge>
         </span>
       </div>
 
@@ -433,9 +430,8 @@ function TaskRow({
         <span className={styles.spacer} />
         {task.state === 'running' && (
           <Tooltip title={t('transfer.pause')}>
-            <Button
+            <IconButton label={t('transfer.pause')}
               size="small"
-              type="text"
               icon={<Pause size={13} strokeWidth={1.75} />}
               onClick={() => onControl('pause')}
             />
@@ -443,9 +439,8 @@ function TaskRow({
         )}
         {task.state === 'paused' && (
           <Tooltip title={t('transfer.resume')}>
-            <Button
+            <IconButton label={t('transfer.resume')}
               size="small"
-              type="text"
               icon={<Play size={13} strokeWidth={1.75} />}
               onClick={() => onControl('resume')}
             />
@@ -453,9 +448,8 @@ function TaskRow({
         )}
         {(task.state === 'error' || task.state === 'canceled') && (
           <Tooltip title={t('common.retry')}>
-            <Button
+            <IconButton label={t('common.retry')}
               size="small"
-              type="text"
               icon={<RotateCcw size={13} strokeWidth={1.75} />}
               onClick={() => onControl('retry')}
             />
@@ -463,9 +457,8 @@ function TaskRow({
         )}
         {!finished && (
           <Tooltip title={t('transfer.cancel')}>
-            <Button
+            <IconButton label={t('transfer.cancel')}
               size="small"
-              type="text"
               danger
               icon={<X size={13} strokeWidth={1.75} />}
               onClick={() => onControl('cancel')}
@@ -474,9 +467,8 @@ function TaskRow({
         )}
         {task.state === 'done' && task.kind === 'download' && (
           <Tooltip title={t('transfer.openFolder')}>
-            <Button
+            <IconButton label={t('transfer.openFolder')}
               size="small"
-              type="text"
               icon={<FolderOpen size={13} strokeWidth={1.75} />}
               onClick={onOpenFolder}
             />

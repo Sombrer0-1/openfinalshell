@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import type { SidebarView } from '@shared/types'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { PanelHeading } from '@/components/ui'
 import { ConnectionTreePanel } from '@/features/connections/ConnectionTreePanel'
 import { SnippetPanel } from '@/features/snippets/SnippetPanel'
 import { TransferList } from '@/features/transfers/TransferList'
@@ -21,8 +22,8 @@ export function SidePanel(): React.JSX.Element {
   const view = useSettingsStore((s) => s.settings?.layout.activeSidebar ?? 'connections')
 
   return (
-    <aside className={styles.sidePanel}>
-      <div className={styles.header}>{t(TITLE_KEY[view])}</div>
+    <aside className={styles.sidePanel} aria-label={t(TITLE_KEY[view])}>
+      <PanelHeading title={t(TITLE_KEY[view])} />
       <div className={styles.content}>
         <ErrorBoundary label={`sidebar:${view}`}>
           {view === 'connections' && <ConnectionTreePanel />}

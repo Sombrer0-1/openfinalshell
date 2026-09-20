@@ -45,30 +45,7 @@
 }
 
 .card {
-  min-width: 0;
   min-height: 156px;
-  padding: 18px;
-  border: 1px solid var(--ofs-border);
-  border-radius: var(--ofs-card-radius);
-  background: var(--ofs-solid-surface);
-  box-shadow: var(--ofs-shadow-panel);
-  color: inherit;
-  text-align: left;
-  transition:
-    border-color 0.15s,
-    transform 0.15s,
-    box-shadow 0.15s;
-}
-.card:hover {
-  border-color: var(--ofs-accent);
-  background: var(--ofs-accent-soft);
-  box-shadow: var(--ofs-shadow-panel);
-}
-
-button.card {
-  appearance: none;
-  font: inherit;
-  cursor: pointer;
 }
 
 .card:focus-visible,
@@ -109,7 +86,7 @@ button.card {
   min-width: 0;
 }
 
-.quickForm :global(.ant-btn) {
+.quickForm :global(.ofs-button) {
   flex: none;
 }
 

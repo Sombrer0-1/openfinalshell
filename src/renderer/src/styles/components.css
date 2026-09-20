@@ -31,6 +31,7 @@
 .ofs-button[data-danger='true'] { color: var(--ofs-error); }
 .ofs-button[data-size='small'] { min-height: 24px; padding: 2px 8px; font-size: var(--ofs-text-caption); }
 .ofs-icon-button { width: 28px; height: 28px; min-height: 28px; padding: 4px; gap: 0; }
+.ofs-icon-button[data-size='small'] { width: 24px; height: 24px; min-height: 24px; padding: 3px; }
 .ofs-button:disabled { color: var(--ofs-text-disabled); cursor: not-allowed; background: var(--ofs-bg-panel); border-color: var(--ofs-border-faint); }
 .ofs-button svg { flex: none; }
 .ofs-loading-mark { opacity: .65; }
@@ -73,13 +74,24 @@ button.ofs-card:hover { border-color: var(--ofs-accent); background: var(--ofs-a
 .ofs-status[data-tone='error'] { color: var(--ofs-error); background: var(--ofs-error-soft); }
 
 /* Portal surfaces share typography, spacing and readable primary actions. */
+.ant-modal-root .ant-modal-wrap, .ant-modal-root .ant-modal-mask, .ant-drawer {
+  width: var(--ofs-viewport-width);
+  height: var(--ofs-viewport-height);
+  right: auto;
+  bottom: auto;
+}
+.ant-modal-root .ant-modal {
+  max-width: calc(var(--ofs-viewport-width) - 32px);
+  top: min(64px, calc(var(--ofs-viewport-height) * .03));
+  padding-bottom: 12px;
+}
 .ant-modal .ant-modal-title, .ant-drawer .ant-drawer-title { font-size: 16px; line-height: 1.5; }
 .ant-modal .ant-modal-header { padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--ofs-border-faint); }
-.ant-modal .ant-modal-body { max-height: calc(100dvh - 180px); overflow-y: auto; }
+.ant-modal .ant-modal-body { max-height: calc(var(--ofs-viewport-height) - 180px); overflow-y: auto; }
 .ant-modal .ant-modal-footer { padding-top: 12px; border-top: 1px solid var(--ofs-border-faint); }
 .ant-drawer .ant-drawer-header { padding: 16px 20px; }
 .ant-drawer .ant-drawer-body { background: var(--ofs-bg-panel); }
-.ant-drawer-content-wrapper { max-width: 100vw; }
+.ant-drawer-content-wrapper { max-width: var(--ofs-viewport-width); max-height: calc(var(--ofs-viewport-height) - var(--ofs-titlebar-height)); }
 .ant-form-item .ant-form-item-label > label { color: var(--ofs-text-2); }
 .ant-form-item .ant-form-item-extra { font-size: var(--ofs-text-caption); color: var(--ofs-text-3); }
 .ant-btn-primary:not(.ant-btn-dangerous):not(:disabled),
@@ -110,5 +122,5 @@ html[data-reduce-transparency='true'] * { backdrop-filter: none !important; -web
 }
 @media (max-height: 650px) {
   .ant-modal { top: 12px; padding-bottom: 12px; }
-  .ant-modal .ant-modal-body { max-height: calc(100dvh - 140px); }
+  .ant-modal .ant-modal-body { max-height: calc(var(--ofs-viewport-height) - 140px); }
 }

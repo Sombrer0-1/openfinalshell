@@ -1,3 +1,4 @@
+import { IconButton } from '@/components/ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { App as AntdApp, Button, Dropdown, Spin } from 'antd'
 import { Activity, Bot, Eraser, FolderTree, History, Search, Unplug } from 'lucide-react'
@@ -441,41 +442,39 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
       {active && !connecting && !closed && (
         <div className={styles.hoverTools}>
           <TitlebarSafeTooltip title={tab.sftpOpen ? t('terminal.closeSftp') : t('terminal.openSftp')}>
-            <Button
+            <IconButton label={tab.sftpOpen ? t('terminal.closeSftp') : t('terminal.openSftp')}
               size="small"
-              type={tab.sftpOpen ? 'primary' : 'text'}
+              selected={tab.sftpOpen}
               icon={<FolderTree size={14} strokeWidth={1.75} />}
               onClick={() => toggleSftp(tab.id)}
             />
           </TitlebarSafeTooltip>
           <TitlebarSafeTooltip title={tab.monitorOpen ? t('terminal.closeMonitor') : t('terminal.openMonitor')}>
-            <Button
+            <IconButton label={tab.monitorOpen ? t('terminal.closeMonitor') : t('terminal.openMonitor')}
               size="small"
-              type={tab.monitorOpen ? 'primary' : 'text'}
+              selected={tab.monitorOpen}
               icon={<Activity size={14} strokeWidth={1.75} />}
               onClick={() => toggleMonitor(tab.id)}
             />
           </TitlebarSafeTooltip>
           <TitlebarSafeTooltip title={t('terminal.search')}>
-            <Button
+            <IconButton label={t('terminal.search')}
               size="small"
-              type="text"
               icon={<Search size={14} strokeWidth={1.75} />}
               onClick={() => setSearchOpen(true)}
             />
           </TitlebarSafeTooltip>
           <TitlebarSafeTooltip title={t('terminal.historyTip')}>
-            <Button
+            <IconButton label={t('terminal.historyTip')}
               size="small"
-              type={historyOpen ? 'primary' : 'text'}
+              selected={historyOpen}
               icon={<History size={14} strokeWidth={1.75} />}
               onClick={() => setHistoryOpen((v) => !v)}
             />
           </TitlebarSafeTooltip>
-          {settings.aiAssistantEnabled && <TitlebarSafeTooltip title="打开 AI 助手（可选中终端文本作为上下文）">
-            <Button
+          {settings.aiAssistantEnabled && <TitlebarSafeTooltip title={t('aiAssistant.title')}>
+            <IconButton label={t('aiAssistant.title')}
               size="small"
-              type="text"
               icon={<Bot size={14} strokeWidth={1.75} />}
               onClick={() => {
                 const selection = bundleRef.current?.term.getSelection()
@@ -485,17 +484,15 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
             />
           </TitlebarSafeTooltip>}
           <TitlebarSafeTooltip title={t('terminal.clear')}>
-            <Button
+            <IconButton label={t('terminal.clear')}
               size="small"
-              type="text"
               icon={<Eraser size={14} strokeWidth={1.75} />}
               onClick={() => bundleRef.current?.term.clear()}
             />
           </TitlebarSafeTooltip>
           <TitlebarSafeTooltip title={t('terminal.disconnect')}>
-            <Button
+            <IconButton label={t('terminal.disconnect')}
               size="small"
-              type="text"
               danger
               icon={<Unplug size={14} strokeWidth={1.75} />}
               onClick={() => void closeTab(tab.id)}

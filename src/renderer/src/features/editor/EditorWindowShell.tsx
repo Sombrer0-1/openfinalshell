@@ -1,5 +1,6 @@
+import { IconButton, EmptyState, LoadingState, UiButton } from '@/components/ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, App as AntdApp, Button, Empty, Spin, Tooltip, Typography } from 'antd'
+import { Alert, App as AntdApp, Spin, Tooltip, Typography } from 'antd'
 import { RefreshCw, Save, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { RemoteCharset } from '@shared/constants'
@@ -301,7 +302,7 @@ export function EditorWindowShell(): React.JSX.Element {
         {/* 空窗口也要一条可拖拽的标题区，否则窗口挪不动 */}
         <div className={styles.tabs} role="tablist" />
         <div className={styles.empty}>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('editor.emptyHint')} />
+          <EmptyState title={t('editor.emptyHint')} />
         </div>
       </div>
     )
@@ -371,9 +372,8 @@ export function EditorWindowShell(): React.JSX.Element {
         <span className={styles.tabsGap} />
         <div className={styles.tabsTools}>
           <Tooltip title={t('editor.saveHint')}>
-            <Button
+            <IconButton label={t('editor.saveHint')}
               size="small"
-              type="text"
               className={styles.toolBtn}
               disabled={!canSave}
               loading={active.saving}
@@ -383,9 +383,8 @@ export function EditorWindowShell(): React.JSX.Element {
             />
           </Tooltip>
           <Tooltip title={t('editor.reload')}>
-            <Button
+            <IconButton label={t('editor.reload')}
               size="small"
-              type="text"
               className={styles.toolBtn}
               disabled={sessionDead}
               icon={<RefreshCw size={13} strokeWidth={1.75} />}
@@ -406,16 +405,9 @@ export function EditorWindowShell(): React.JSX.Element {
       <div className={styles.body}>
         {active.status === 'error' ? (
           <div className={styles.empty}>
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <span>
-                  {active.error}
-                  <br />
-                  <a onClick={() => tryReload(active.key)}>{t('common.retry')}</a>
-                </span>
-              }
-            />
+            <EmptyState title={active.error} tone="error" action={
+              <UiButton size="small" onClick={() => tryReload(active.key)}>{t('common.retry')}</UiButton>
+            } />
           </div>
         ) : active.view ? (
           <CodeEditor
@@ -430,7 +422,7 @@ export function EditorWindowShell(): React.JSX.Element {
           />
         ) : (
           <div className={styles.empty}>
-            <Spin />
+            <LoadingState label={t('common.loading')} />
           </div>
         )}
       </div>

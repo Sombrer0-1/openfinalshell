@@ -10,7 +10,7 @@
   /* 整条默认可拖拽窗口；交互元素单独 no-drag */
   -webkit-app-region: drag;
   /* 右侧给原生窗口按钮（titleBarOverlay）留位 */
-  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 4px);
+  padding-right: calc((100vw - env(titlebar-area-width, 100vw)) / var(--ofs-ui-zoom) + 4px);
 }
 
 /* hiddenInset 的 Traffic Lights 位于标题栏左侧；给品牌和标签留出安全区，

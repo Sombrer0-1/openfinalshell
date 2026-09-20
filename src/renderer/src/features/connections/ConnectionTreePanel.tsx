@@ -1,9 +1,8 @@
+import { IconButton, EmptyState } from '@/components/ui'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   App as AntdApp,
-  Button,
   Dropdown,
-  Empty,
   Input,
   Tooltip,
   Tree,
@@ -242,16 +241,14 @@ export function ConnectionTreePanel(): React.JSX.Element {
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
-        <Button
-          size="small"
-          type="text"
+        <IconButton label={t('sidebar.newConnection')}
+              size="small"
           icon={<Plus size={14} strokeWidth={1.75} />}
           title={t('sidebar.newConnection')}
           onClick={() => setEditingProfile('new')}
         />
-        <Button
-          size="small"
-          type="text"
+        <IconButton label={t('sidebar.newGroup')}
+              size="small"
           icon={<FolderPlus size={14} strokeWidth={1.75} />}
           title={t('sidebar.newGroup')}
           onClick={() => promptNewGroup(null)}
@@ -259,11 +256,7 @@ export function ConnectionTreePanel(): React.JSX.Element {
       </div>
       <div className={styles.tree}>
         {treeData.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={t('sidebar.emptyConnections')}
-            style={{ marginTop: 48 }}
-          />
+          <EmptyState title={t('sidebar.emptyConnections')} />
         ) : (
           <Tree.DirectoryTree
             treeData={treeData}
