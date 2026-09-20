@@ -64,6 +64,8 @@ export interface OfsTheme {
     bgBase: string
     bgPanel: string
     bgElevated: string
+    bgInset: string
+    bgRaised: string
     bgHover: string
     bgActive: string
     /** 半透明外壳、导航栏和浮层的正常表面 */
@@ -73,10 +75,12 @@ export interface OfsTheme {
     /** 禁用透明效果或不支持 backdrop-filter 时的实体回退 */
     solidSurface: string
     border: string
+    borderFaint: string
     borderStrong: string
     glassBorder: string
     textPrimary: string
     textSecondary: string
+    textSubtle: string
     textDisabled: string
     success: string
     warning: string

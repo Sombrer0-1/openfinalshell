@@ -3,6 +3,12 @@ import { themes } from './palettes'
 import type { OfsTheme } from './types'
 import { resolvePlatformUiProfile, resolvePlatformUiTokens } from '@/ui/platform'
 import type { PlatformUiProfile } from '@/ui/platform'
+import { mixColor, resolveAccent } from './color'
+
+function accentFor(mode: 'dark' | 'light', accent: string) {
+  const ui = themes[mode].ui
+  return resolveAccent(accent, mode, [ui.bgBase, ui.bgPanel, ui.bgElevated, ui.bgRaised, ui.bgInset])
+}
 
 /**
  * 主题单一事实来源（TS token）→ 双输出：
@@ -16,6 +22,7 @@ export function applyCssVars(
   platformProfile?: PlatformUiProfile
 ): OfsTheme {
   const t = themes[mode]
+  const brand = accentFor(mode, accent)
   const root = document.documentElement
   const profile = platformProfile ?? resolvePlatformUiProfile()
   const platformTokens = resolvePlatformUiTokens(profile)
@@ -28,6 +35,9 @@ export function applyCssVars(
     '--ofs-bg-base': t.ui.bgBase,
     '--ofs-bg-panel': t.ui.bgPanel,
     '--ofs-bg-elevated': t.ui.bgElevated,
+    '--ofs-bg-inset': t.ui.bgInset,
+    '--ofs-bg-raised': t.ui.bgRaised,
+    '--ofs-bg-subtle': t.ui.bgInset,
     '--ofs-bg-hover': t.ui.bgHover,
     '--ofs-bg-active': t.ui.bgActive,
     '--ofs-glass-surface': t.ui.glassSurface,
@@ -38,14 +48,22 @@ export function applyCssVars(
     '--ofs-shell-surface-strong': glassEnabled ? t.ui.glassSurfaceStrong : t.ui.solidSurface,
     '--ofs-shell-border': glassEnabled ? t.ui.glassBorder : t.ui.border,
     '--ofs-border': t.ui.border,
+    '--ofs-border-faint': t.ui.borderFaint,
     '--ofs-border-strong': t.ui.borderStrong,
     '--ofs-text-1': t.ui.textPrimary,
     '--ofs-text-2': t.ui.textSecondary,
-    '--ofs-text-3': t.ui.textDisabled,
-    '--ofs-accent': accent,
+    '--ofs-text-3': t.ui.textSubtle,
+    '--ofs-text-disabled': t.ui.textDisabled,
+    '--ofs-accent-seed': brand.seed,
+    '--ofs-accent': brand.color,
+    '--ofs-accent-soft': brand.soft,
+    '--ofs-on-accent': brand.onColor,
     '--ofs-success': t.ui.success,
     '--ofs-warning': t.ui.warning,
     '--ofs-error': t.ui.error,
+    '--ofs-success-soft': mixColor(t.ui.bgPanel, t.ui.success, 0.1),
+    '--ofs-warning-soft': mixColor(t.ui.bgPanel, t.ui.warning, 0.1),
+    '--ofs-error-soft': mixColor(t.ui.bgPanel, t.ui.error, 0.1),
     '--ofs-shadow-panel': t.ui.shadowPanel,
     '--ofs-shadow-modal': t.ui.shadowModal,
     '--ofs-platform-radius-s': `${platformTokens.radius.small}px`,
@@ -75,18 +93,26 @@ export function buildAntdTheme(
   platformProfile?: PlatformUiProfile
 ): ThemeConfig {
   const t = themes[mode]
+  const brand = accentFor(mode, accent)
   const platformTokens = resolvePlatformUiTokens(platformProfile ?? resolvePlatformUiProfile())
   return {
     cssVar: true,
     hashed: false,
     algorithm: mode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
-      colorPrimary: accent,
+      colorPrimary: brand.color,
+      colorPrimaryText: brand.color,
+      colorPrimaryBg: brand.soft,
+      colorInfo: brand.color,
+      colorSuccess: t.ui.success,
+      colorWarning: t.ui.warning,
+      colorError: t.ui.error,
+      colorLink: brand.color,
       colorBgBase: t.ui.bgBase,
       colorBgLayout: t.ui.bgBase,
       colorBgContainer: t.ui.bgPanel,
       colorBgElevated: t.ui.bgElevated,
-      colorBorder: t.ui.border,
+      colorBorder: t.ui.borderStrong,
       colorBorderSecondary: t.ui.border,
       colorText: t.ui.textPrimary,
       colorTextSecondary: t.ui.textSecondary,
@@ -101,6 +127,16 @@ export function buildAntdTheme(
       controlHeightLG: 40,
       fontSize: 13,
       fontFamily: platformTokens.fontFamily
+    },
+    components: {
+      Button: { primaryColor: brand.onColor, primaryShadow: 'none', defaultShadow: 'none', dangerShadow: 'none' },
+      Input: { activeShadow: 'none' },
+      Select: { optionSelectedBg: brand.soft },
+      Menu: { itemSelectedBg: brand.soft, itemSelectedColor: brand.color },
+      Tabs: { inkBarColor: brand.color },
+      Table: { headerBg: t.ui.bgPanel, rowHoverBg: brand.soft },
+      Tree: { nodeSelectedBg: brand.soft, nodeHoverBg: t.ui.bgHover },
+      Segmented: { itemSelectedBg: t.ui.bgElevated }
     }
   }
 }
