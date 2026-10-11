@@ -75,8 +75,8 @@ class UnsafeLocalDelete(val refusal: LocalDeleteRefusal, val path: String) :
  * or root. Remote SFTP delete has no equivalent guard because a wrong path there costs the user a
  * server, not the device holding their data.
  *
- * The desktop counterpart (`src/main/sftp/fastDelete.ts`) refuses paths with fewer than two
- * segments. That rule does not transplant: on Android `/data` and `/system` have one segment, while
+ * A depth-only rule (refuse paths with fewer than two segments) does not transplant: on Android
+ * `/data` and `/system` have one segment, while
  * `/storage/emulated/0` has four and is *the user's entire shared storage*, so a depth rule alone
  * would permit wiping all of it. Depth is therefore only a floor; the load-bearing rules are the
  * protected subtrees, the mount points, and the positive writable-root allow-list.
@@ -86,9 +86,8 @@ class UnsafeLocalDelete(val refusal: LocalDeleteRefusal, val path: String) :
  * would be harmless. Paying that with a rare refusal is better than the alternative, where a link
  * planted inside a writable root turns an ordinary delete into a system-file delete.
  *
- * Callers must treat this as one of two checks, never the only one. The same reasoning as the
- * desktop guard: a preview or pre-check exists for the user, and the authoritative refusal happens
- * immediately before the I/O.
+ * Callers must treat this as one of two checks, never the only one. A preview or pre-check exists
+ * for the user, and the authoritative refusal happens immediately before the I/O.
  */
 object LocalPathGuard {
     /** Refused at the path itself and anywhere beneath it, at every tier including root. */

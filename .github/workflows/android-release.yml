@@ -46,7 +46,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -78,18 +77,18 @@ jobs:
         run: node scripts/generateSharedSchema.mjs
 
       - name: Verify generated schema is committed
-        run: git diff --exit-code -- src/shared/generated android/core/src/main/kotlin/io/github/openfinalshell/android/core/protocol
+        run: git diff --exit-code -- android/core/src/main/kotlin/io/github/openfinalshell/android/core/protocol
 
-      - name: Validate tag and package version
+      - name: Validate tag and app version
         shell: bash
         run: |
-          pkg=$(node -p "require('./package.json').version")
+          version=$(sed -n 's/^versionName=//p' android/gradle.properties)
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Expected an existing release version tag"; exit 1; }
           git show-ref --verify "refs/tags/$RELEASE_TAG" >/dev/null || { echo "::error::Release tag not checked out"; exit 1; }
           tag=${RELEASE_TAG#v}
-          echo "package.json=$pkg tag=$tag"
-          if [ "$pkg" != "$tag" ]; then
-            echo "::error::tag $RELEASE_TAG does not match package.json version $pkg"
+          echo "versionName=$version tag=$tag"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::tag $RELEASE_TAG does not match android/gradle.properties versionName $version"
             exit 1
           fi
 
@@ -138,14 +137,14 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          version=$(node -p "require('./package.json').version")
+          version=$(sed -n 's/^versionName=//p' android/gradle.properties)
           gradle -p android :app:assembleRelease :app:bundleRelease \
             -PrequireReleaseSigning=true -PversionName="$version" -PversionCode="$GITHUB_RUN_NUMBER" --stacktrace
 
       - name: Normalize Android release assets
         shell: bash
         run: |
-          version=$(node -p "require('./package.json').version")
+          version=$(sed -n 's/^versionName=//p' android/gradle.properties)
           mkdir -p android-release
           shopt -s nullglob
           apks=(android/app/build/outputs/apk/release/*.apk)
@@ -191,9 +190,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          # Android and desktop release jobs start together. Either job may create
-          # the Release first; retry briefly to absorb a concurrent create or API
-          # propagation delay, without waiting for the desktop build itself.
+          # Retry briefly to absorb a concurrent create or API propagation delay.
           for attempt in $(seq 1 12); do
             if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
               echo "Release $RELEASE_TAG is available"
@@ -201,8 +198,8 @@ jobs:
             fi
             gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
-              --title "OpenFinalShell $RELEASE_TAG" \
-              --notes "Android assets are being uploaded; desktop assets will follow." \
+              --title "OpenFinalShell Android $RELEASE_TAG" \
+              --notes "Android APK and AAB assets for this tag." \
               --verify-tag >/dev/null 2>&1 && exit 0 || true
             echo "Waiting for Release $RELEASE_TAG ($attempt/12)"
             sleep 5

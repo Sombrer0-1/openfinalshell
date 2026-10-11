@@ -45,7 +45,7 @@ private object X25519 {
     }
 }
 
-/** Length-prefixed LAN Sync handshake, compatible with the desktop protocol.ts implementation. */
+/** Length-prefixed LAN Sync handshake. The frame layout is the shared wire format. */
 class LanSyncSession(private val socket: Socket) {
     private val bufferedFrames = ArrayDeque<SyncFrame>()
     suspend fun send(
