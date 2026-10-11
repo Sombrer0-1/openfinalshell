@@ -50,6 +50,28 @@ internal fun terminalLayoutEffect(previous: TerminalLayoutSignal?, next: Termina
     return TerminalLayoutEffect(resize = gridChanged, redraw = gridChanged || pixelsChanged)
 }
 
+internal data class TerminalLayoutPublication(
+    val effect: TerminalLayoutEffect,
+    val remembered: TerminalLayoutSignal?
+)
+
+/**
+ * A grid change that cannot be delivered is not remembered. onAttached measures before bind()
+ * installs the listener; storing that signal made the later bind look unchanged, so the PTY
+ * stayed at the placeholder size.
+ */
+internal fun publishTerminalLayout(
+    previous: TerminalLayoutSignal?,
+    next: TerminalLayoutSignal,
+    listenerReady: Boolean
+): TerminalLayoutPublication {
+    val effect = terminalLayoutEffect(previous, next)
+    if (effect.resize && !listenerReady) {
+        return TerminalLayoutPublication(effect.copy(resize = false), previous)
+    }
+    return TerminalLayoutPublication(effect, next)
+}
+
 /** Converts measured pixels into a stable PTY viewport, preserving cell boundaries. */
 internal fun measureTerminalViewport(
     width: Int,
@@ -312,10 +334,10 @@ class SshTerminalView @JvmOverloads constructor(
             density = resources.displayMetrics.density,
             fontScale = resources.configuration.fontScale
         )
-        val effect = terminalLayoutEffect(lastSignal, signal)
-        lastSignal = signal
-        if (effect.redraw) invalidate()
-        if (effect.resize) onResize?.invoke(viewport.columns, viewport.rows)
+        val publication = publishTerminalLayout(lastSignal, signal, onResize != null)
+        lastSignal = publication.remembered
+        if (publication.effect.redraw) invalidate()
+        if (publication.effect.resize) onResize?.invoke(viewport.columns, viewport.rows)
     }
 
     private fun activeTranscriptRows(): Int {

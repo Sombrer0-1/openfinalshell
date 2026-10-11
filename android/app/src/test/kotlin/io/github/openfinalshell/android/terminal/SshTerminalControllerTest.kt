@@ -27,6 +27,13 @@ class SshTerminalControllerTest {
         assertTrue(grid.resize)
         assertTrue(grid.redraw)
         assertTrue(terminalLayoutEffect(null, previous).resize)
+        val unpublished = publishTerminalLayout(null, previous, listenerReady = false)
+        assertFalse(unpublished.effect.resize)
+        assertNull(unpublished.remembered)
+        val published = publishTerminalLayout(unpublished.remembered, previous, listenerReady = true)
+        assertTrue(published.effect.resize)
+        assertEquals(previous, published.remembered)
+        assertFalse(publishTerminalLayout(published.remembered, previous, listenerReady = true).effect.resize)
     }
 
     @Test
