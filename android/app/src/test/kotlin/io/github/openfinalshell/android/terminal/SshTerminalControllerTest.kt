@@ -16,6 +16,27 @@ class SshTerminalControllerTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 
     @Test
+    fun `pixel changes redraw without a duplicate pty resize`() {
+        val previous = TerminalLayoutSignal(columns = 80, rows = 24, fontPx = 28, density = 2f, fontScale = 1f)
+        val pixels = previous.copy(density = 2.75f, fontPx = 39)
+        val sameGrid = terminalLayoutEffect(previous, pixels)
+        val grid = terminalLayoutEffect(previous, previous.copy(columns = 40, rows = 12))
+
+        assertTrue(sameGrid.redraw)
+        assertFalse(sameGrid.resize)
+        assertTrue(grid.resize)
+        assertTrue(grid.redraw)
+        assertTrue(terminalLayoutEffect(null, previous).resize)
+        val unpublished = publishTerminalLayout(null, previous, listenerReady = false)
+        assertFalse(unpublished.effect.resize)
+        assertNull(unpublished.remembered)
+        val published = publishTerminalLayout(unpublished.remembered, previous, listenerReady = true)
+        assertTrue(published.effect.resize)
+        assertEquals(previous, published.remembered)
+        assertFalse(publishTerminalLayout(published.remembered, previous, listenerReady = true).effect.resize)
+    }
+
+    @Test
     fun `measures viewport using complete cells and content padding`() {
         assertEquals(
             TerminalViewport(columns = 20, rows = 10),

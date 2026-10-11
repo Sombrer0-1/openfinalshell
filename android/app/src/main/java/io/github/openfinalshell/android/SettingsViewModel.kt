@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.openfinalshell.android.storage.AndroidSettings
 import io.github.openfinalshell.android.storage.AppDatabase
 import io.github.openfinalshell.android.storage.SettingsRepository
+import io.github.openfinalshell.android.storage.SettingsWriteQueue
 import io.github.openfinalshell.android.update.AndroidUpdateManager
 import io.github.openfinalshell.android.update.UpdateState
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -35,7 +37,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val database = AppDatabase.create(application)
     private val repository = SettingsRepository(database.documents())
     private val updateManager = AndroidUpdateManager(application)
+    private val queue = SettingsWriteQueue()
     private val saveMutex = Mutex()
+    private var persistGeneration = 0
     private var loadJob: Job
 
     private val mutableState = MutableStateFlow(
@@ -57,14 +61,19 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             // Android 13 may receive a per-app language change while the app is not running.
             // A concrete platform locale takes precedence over our older local document.
             val platformLanguage = AndroidLocales.settingFor(AppCompatDelegate.getApplicationLocales())
-            val settings = if (platformLanguage != AndroidLocales.SYSTEM && platformLanguage != storedSettings.language) {
+            val adjusted = if (platformLanguage != AndroidLocales.SYSTEM && platformLanguage != storedSettings.language) {
                 storedSettings.copy(language = platformLanguage)
             } else {
                 storedSettings
             }
-            if (settings != storedSettings) withContext(Dispatchers.IO) { repository.save(settings) }
-            mutableState.update { it.copy(settings = settings, loaded = true) }
+            // Replay edits that happened before this load onto the stored document. Do not write
+            // the default object, and do not replace the screen with a snapshot captured before
+            // a later keystroke.
+            queue.confirm(adjusted, dirty = adjusted != storedSettings)
+            mutableState.update { it.copy(settings = queue.current(), loaded = true) }
+            val settings = queue.current()
             AndroidLocales.apply(settings.language)
+            if (queue.needsSave()) schedulePersist()
             if (settings.autoCheckUpdates) checkForUpdates()
         }
     }
@@ -73,18 +82,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         updateAndPersist(transform)
     }
 
-    private fun updateAndPersist(
-        transform: (AndroidSettings) -> AndroidSettings,
-        afterPersist: ((AndroidSettings) -> Unit)? = null
-    ) {
-        mutableState.update { it.copy(settings = transform(it.settings), message = null) }
-        persist(afterPersist)
+    private fun updateAndPersist(transform: (AndroidSettings) -> AndroidSettings) {
+        queue.edit(transform)
+        mutableState.update { it.copy(settings = queue.current(), message = null) }
+        if (queue.isConfirmed()) schedulePersist()
     }
 
-    fun setLanguage(language: String) = updateAndPersist(
-        transform = { it.copy(language = AndroidLocales.normalize(language)) },
-        afterPersist = { AndroidLocales.apply(it.language) }
-    )
+    fun setLanguage(language: String) {
+        update { it.copy(language = AndroidLocales.normalize(language)) }
+        AndroidLocales.apply(state.value.settings.language)
+    }
 
     /** Mirrors a language selected in Android 13's system app-language settings. */
     fun setLanguageFromPlatform(language: String) {
@@ -139,21 +146,43 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun installPermissionIntent(): Intent = updateManager.installPermissionIntent()
     fun canInstallPackages(): Boolean = updateManager.canInstallPackages()
 
-    private fun persist(afterPersist: ((AndroidSettings) -> Unit)? = null) {
+    private fun schedulePersist() {
+        val generation = ++persistGeneration
         viewModelScope.launch {
-            mutableState.update { it.copy(saving = true) }
-            runCatching {
-                // The mutex makes fast successive control changes persist in order using latest state.
-                saveMutex.withLock {
-                    withContext(Dispatchers.IO) { repository.save(state.value.settings) }
-                }
-            }.onSuccess {
-                afterPersist?.invoke(state.value.settings)
-            }.onFailure { error ->
-                mutableState.update { it.copy(message = error.message ?: getApplication<Application>().getString(R.string.settings_save_failed)) }
-            }
-            mutableState.update { it.copy(saving = false) }
+            delay(PERSIST_DEBOUNCE_MS)
+            if (generation != persistGeneration) return@launch
+            flushPersist()
         }
+    }
+
+    private suspend fun flushPersist() {
+        val committed = saveMutex.withLock {
+            val batch = queue.snapshotForSave()
+            if (batch == null) {
+                false
+            } else {
+                mutableState.update { it.copy(saving = true) }
+                val saved = runCatching { withContext(Dispatchers.IO) { repository.save(batch.settings) } }
+                saved.onSuccess {
+                    queue.commit(batch)
+                    mutableState.update { it.copy(settings = queue.current(), saving = false) }
+                }.onFailure { error ->
+                    mutableState.update {
+                        it.copy(
+                            saving = false,
+                            message = error.message ?: getApplication<Application>().getString(R.string.settings_save_failed)
+                        )
+                    }
+                }
+                saved.isSuccess
+            }
+        }
+        // A failed write stays queued for the next edit. Retrying it here would spin on a persistent I/O error.
+        if (committed && queue.needsSave()) schedulePersist()
+    }
+
+    private companion object {
+        const val PERSIST_DEBOUNCE_MS = 120L
     }
 
     override fun onCleared() {

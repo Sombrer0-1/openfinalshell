@@ -32,6 +32,7 @@ import io.github.openfinalshell.android.core.ssh.SftpEntry
 import io.github.openfinalshell.android.core.ssh.SshSessionManager
 import io.github.openfinalshell.android.core.terminal.TerminalSnapshot
 import io.github.openfinalshell.android.core.sftp.TransferQueue
+import io.github.openfinalshell.android.core.sftp.orderedSftpEntries
 import io.github.openfinalshell.android.core.sftp.TransferSink
 import io.github.openfinalshell.android.core.sftp.TransferSource
 import io.github.openfinalshell.android.core.sftp.TransferTask
@@ -54,6 +55,7 @@ import io.github.openfinalshell.android.local.appTierRoots
 import io.github.openfinalshell.android.local.privilegedTierRoots
 import io.github.openfinalshell.android.terminal.SshTerminalController
 import io.github.openfinalshell.android.terminal.TerminalHostController
+import io.github.openfinalshell.android.terminal.TerminalSizeTracker
 import io.github.openfinalshell.android.storage.AndroidCredentialStore
 import io.github.openfinalshell.android.storage.AppDatabase
 import io.github.openfinalshell.android.storage.ProfileRepository
@@ -77,8 +79,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -137,11 +141,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val privateKeys = PrivateKeyRepository(database.privateKeys(), credentialStore)
     private val shells = mutableMapOf<String, ShellChannel>()
     private val shellOutputJobs = mutableMapOf<String, Job>()
-    /** Prevent a recomposition or reconnect event from opening a second PTY for one session. */
-    private val openingShells = mutableSetOf<String>()
+    /** One size tracker per session so an in-flight open keeps the latest measurement. */
+    private val terminalSizes = mutableMapOf<String, TerminalSizeTracker>()
+    private val terminalResizeLocks = mutableMapOf<String, Mutex>()
     /** Terminal controllers keep VT parsing and rendering state out of Compose text nodes. */
     private val terminalControllers = mutableMapOf<String, TerminalHostController>()
     private var monitorJob: Job? = null
+    /** Bumped by every start and stop so a superseded loop cannot set running back to true. */
+    private var monitorToken = 0
     private val transferQueue = TransferQueue(viewModelScope)
     private var transferSettings = AndroidSettings()
     private val documents = SafDocuments(application.contentResolver)
@@ -789,10 +796,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startMonitoring(intervalSeconds: Int = 2) {
+    fun startMonitoring(intervalSeconds: Int = transferSettings.monitorIntervalSeconds) {
         val sessionId = state.value.selectedSessionId ?: return setStatus(StatusKey.SESSION_REQUIRED)
+        val token = ++monitorToken
+        val interval = intervalSeconds.coerceIn(2, 60)
         monitorJob?.cancel()
-        monitorJob = viewModelScope.launch { monitor.start(sessionId, intervalSeconds) }
+        monitorJob = viewModelScope.launch {
+            yield()
+            if (token != monitorToken || !isActive) return@launch
+            monitor.start(sessionId, interval) { token == monitorToken && isActive }
+        }
     }
 
     private fun collectStaticInfo(sessionId: String) {
@@ -803,6 +816,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopMonitoring() {
+        monitorToken++
         monitor.stop()
         monitorJob?.cancel()
         monitorJob = null
@@ -822,7 +836,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             var channel: io.github.openfinalshell.android.core.ssh.SftpChannel? = null
             try {
                 channel = sessions.openSftp(sessionId)
-                val entries = channel.list(path).filterNot { it.name == "." || it.name == ".." || (!transferSettings.sftpShowHiddenFiles && it.name.startsWith('.')) }
+                val entries = orderedSftpEntries(
+                    channel.list(path).filterNot { it.name == "." || it.name == ".." || (!transferSettings.sftpShowHiddenFiles && it.name.startsWith('.')) }
+                )
                 updateState { it.copy(sftpPath = path, sftpEntries = entries, status = UiStatus(StatusKey.SFTP_READY)) }
             } catch (error: Throwable) {
                 setStatus(readableError(error, StatusKey.SFTP_BROWSE_FAILED))
@@ -851,9 +867,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun applyTransferSettings(settings: AndroidSettings) {
         val refresh = transferSettings.sftpShowHiddenFiles != settings.sftpShowHiddenFiles
         val rootGateChanged = transferSettings.localAllowRoot != settings.localAllowRoot
+        val intervalChanged = transferSettings.monitorIntervalSeconds != settings.monitorIntervalSeconds
         transferSettings = settings
         transferQueue.setConcurrency(settings.sftpConcurrency)
         if (refresh && state.value.selectedSessionId != null) browseSftp()
+        if (intervalChanged && monitor.state.value.running) startMonitoring(settings.monitorIntervalSeconds)
         // The root gate changes what a card may offer, so the tiers have to be re-resolved.
         if (rootGateChanged) viewModelScope.launch { refreshLocalTiers() }
     }
@@ -1459,14 +1477,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openShell(sessionId: String, cols: Int, rows: Int) {
-        if (shells.containsKey(sessionId)) {
-            resizeTerminal(sessionId, cols, rows)
-            return
-        }
-        if (!openingShells.add(sessionId)) return
+        val tracker = terminalSizes.getOrPut(sessionId) { TerminalSizeTracker() }
+        val openSize = tracker.beginOpen(cols, rows) ?: return
         viewModelScope.launch {
+            var opened = false
             try {
-                val shell = sessions.openShell(sessionId, cols, rows)
+                val shell = sessions.openShell(sessionId, openSize.cols, openSize.rows)
                 shells[sessionId] = shell
                 val controller: TerminalHostController = if (shell.ownsEmulator) {
                     // A channel that owns its emulator already renders its own bytes; it exposes the
@@ -1478,8 +1494,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     SshTerminalController(
                         inputScope = viewModelScope,
                         inputSink = { bytes -> shell.write(bytes) },
-                        initialCols = cols.coerceAtLeast(1),
-                        initialRows = rows.coerceAtLeast(1),
+                        initialCols = openSize.cols,
+                        initialRows = openSize.rows,
                         scrollbackLines = transferSettings.terminalScrollbackLines
                     )
                 }
@@ -1496,10 +1512,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
+                tracker.finishOpen(openSize.cols, openSize.rows)
+                opened = true
+                flushTerminalSize(sessionId, shell, controller)
             } catch (error: Throwable) {
+                if (!opened) tracker.failOpen()
                 setStatus(readableError(error, StatusKey.TERMINAL_OPEN_FAILED))
-            } finally {
-                openingShells.remove(sessionId)
             }
         }
     }
@@ -1562,12 +1580,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun terminalController(sessionId: String): TerminalHostController? = terminalControllers[sessionId]
 
     fun resizeTerminal(sessionId: String, cols: Int, rows: Int) {
+        val tracker = terminalSizes.getOrPut(sessionId) { TerminalSizeTracker() }
+        tracker.noteResize(cols, rows)
         val shell = shells[sessionId] ?: return
-        val controller = terminalControllers[sessionId]
-        viewModelScope.launch {
-            runCatching {
-                controller?.resize(cols.coerceAtLeast(1), rows.coerceAtLeast(1))
-                shell.resize(cols.coerceAtLeast(1), rows.coerceAtLeast(1))
+        val controller = terminalControllers[sessionId] ?: return
+        viewModelScope.launch { flushTerminalSize(sessionId, shell, controller) }
+    }
+
+    private suspend fun flushTerminalSize(sessionId: String, shell: ShellChannel, controller: TerminalHostController) {
+        val tracker = terminalSizes[sessionId] ?: return
+        terminalResizeLocks.getOrPut(sessionId) { Mutex() }.withLock {
+            while (true) {
+                val size = tracker.unapplied() ?: break
+                controller.resize(size.cols, size.rows)
+                shell.resize(size.cols, size.rows)
+                tracker.markApplied(size.cols, size.rows)
             }
         }
     }
@@ -1578,7 +1605,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnect(sessionId: String) {
         cancelSessionTransfers(sessionId)
-        openingShells.remove(sessionId)
+        terminalSizes.remove(sessionId)?.reset()
+        terminalResizeLocks.remove(sessionId)
         // Disconnecting drops the root confirmation, so reconnecting has to ask again. The teardown
         // is where the session stops being something the user is actively watching.
         state.value.sessions[sessionId]?.profile?.id?.let { confirmedRootProfiles -= it }

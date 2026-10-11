@@ -227,7 +227,7 @@ class AiClient private constructor(
     }
 }
 
-/** Keep the same metadata semantics as desktop aiModels.ts; names are never evidence of vision. */
+/** Model list metadata: a model name is never evidence of vision support. */
 internal fun parseModels(root: JsonObject, status: Int = 200): List<AiModel> {
     fun image(row: JsonObject): String {
         val caps = row["capabilities"] as? JsonObject

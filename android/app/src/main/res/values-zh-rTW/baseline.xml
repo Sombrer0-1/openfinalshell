@@ -70,6 +70,7 @@
     <string name="sftp_connect_body">連線至伺服器後即可瀏覽檔案。</string>
     <string name="sftp_empty_title">目錄是空的</string>
     <string name="sftp_empty_body">這裡沒有可顯示的項目。</string>
+    <string name="sftp_directory_entry">目錄 %1$s</string>
     <string name="terminal_no_session">沒有工作階段</string>
     <string name="terminal_select_body">請先選取已儲存的連線並建立連線。</string>
     <string name="terminal_connecting">正在連線至 %1$s...</string>
@@ -85,6 +86,8 @@
     <string name="monitor_memory">記憶體 %1$s / %2$s</string>
     <string name="monitor_network">網路 %1$s：下載 %2$s/s，上傳 %3$s/s</string>
     <string name="monitor_disk">磁碟使用量</string>
+    <string name="monitor_swap">置換空間 %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s：%2$.1f%%</string>
     <string name="monitor_waiting_title">正在等待監控資料</string>
     <string name="monitor_port_traffic">連接埠流量</string>
     <string name="monitor_ports_empty">沒有連接埠流量資料。</string>

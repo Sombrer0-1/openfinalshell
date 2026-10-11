@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -70,6 +71,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -89,8 +91,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -907,6 +911,10 @@ private fun SftpScreen(state: AndroidUiState, viewModel: MainViewModel, settings
     var transferAction by rememberSaveable { mutableStateOf("upload") }
     var showDirectoryForm by rememberSaveable { mutableStateOf(false) }
     var showRenameForm by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = showDirectoryForm || showRenameForm) {
+        showDirectoryForm = false
+        showRenameForm = false
+    }
 
     pendingDeletePath?.let { targetPath ->
         AlertDialog(
@@ -1059,7 +1067,11 @@ private fun SftpEntryRow(
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(start = OpenFinalShellSpacing.Medium, top = OpenFinalShellSpacing.Small, bottom = OpenFinalShellSpacing.Small, end = OpenFinalShellSpacing.Small), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(if (directory) "[DIR] ${entry.name}" else entry.name, fontFamily = if (directory) FontFamily.Default else FontFamily.Monospace, maxLines = 2)
+                Text(
+                    if (directory) androidx.compose.ui.res.stringResource(R.string.sftp_directory_entry, entry.name) else entry.name,
+                    fontFamily = if (directory) FontFamily.Default else FontFamily.Monospace,
+                    maxLines = 2
+                )
                 Text(entry.path, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
             io.github.openfinalshell.android.transfer.SftpDownloadButton(entry.path, viewModel, onDownloadDirectory)
@@ -1516,15 +1528,26 @@ private fun MonitorScreen(state: AndroidUiState, viewModel: MainViewModel) {
         snapshot?.let { current ->
             item {
                 MetricCard(androidx.compose.ui.res.stringResource(R.string.monitor_resources)) {
-                    Text(androidx.compose.ui.res.stringResource(R.string.monitor_cpu, current.cpu.usagePct, current.cpu.loadAvg.joinToString(" / ") { value -> "%.2f".format(value) }))
-                    Text(androidx.compose.ui.res.stringResource(R.string.monitor_memory, formatBytes(current.mem.usedKb * 1024), formatBytes(current.mem.totalKb * 1024)))
+                    val cpuText = androidx.compose.ui.res.stringResource(R.string.monitor_cpu, current.cpu.usagePct, current.cpu.loadAvg.joinToString(" / ") { value -> "%.2f".format(value) })
+                    val memoryText = androidx.compose.ui.res.stringResource(R.string.monitor_memory, formatBytes(current.mem.usedKb * 1024), formatBytes(current.mem.totalKb * 1024))
+                    UsageMeter(cpuText, current.cpu.usagePct)
+                    UsageMeter(memoryText, percentOf(current.mem.usedKb, current.mem.totalKb))
+                    if (current.mem.swapTotalKb > 0) {
+                        val swapText = androidx.compose.ui.res.stringResource(R.string.monitor_swap, formatBytes(current.mem.swapUsedKb * 1024), formatBytes(current.mem.swapTotalKb * 1024))
+                        UsageMeter(swapText, percentOf(current.mem.swapUsedKb, current.mem.swapTotalKb))
+                    }
                     current.net.firstOrNull()?.let { net -> Text(androidx.compose.ui.res.stringResource(R.string.monitor_network, net.iface, formatBytes(net.rxBps), formatBytes(net.txBps))) }
                 }
             }
             current.diskFs?.takeIf { it.isNotEmpty() }?.let { disks ->
                 item {
                     MetricCard(androidx.compose.ui.res.stringResource(R.string.monitor_disk)) {
-                        disks.take(4).forEach { disk -> Text("${disk.mount}: ${"%.1f".format(disk.usePct)}%") }
+                        disks.take(4).forEach { disk ->
+                            UsageMeter(
+                                androidx.compose.ui.res.stringResource(R.string.monitor_disk_entry, disk.mount, disk.usePct),
+                                disk.usePct
+                            )
+                        }
                     }
                 }
             }
@@ -1873,7 +1896,11 @@ private fun ChoiceRow(label: String, selected: String, options: List<Pair<String
 
 @Composable
 private fun NumberSetting(label: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
+    var focused by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf(value.toString()) }
+    LaunchedEffect(value, focused) {
+        if (!focused) text = value.toString()
+    }
     OutlinedTextField(
         value = text,
         onValueChange = { next ->
@@ -1881,7 +1908,7 @@ private fun NumberSetting(label: String, value: Int, range: IntRange, onChange: 
             text = filtered
             filtered.toIntOrNull()?.takeIf { it in range }?.let(onChange)
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
         label = { Text(label) },
         supportingText = { Text(range.first.toString() + " - " + range.last.toString()) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1894,8 +1921,12 @@ private fun UpdatePanel(state: SettingsUiState, viewModel: SettingsViewModel, on
     when (val update = state.update) {
         UpdateState.Idle -> Text(androidx.compose.ui.res.stringResource(R.string.update_not_checked))
         UpdateState.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CircularProgressIndicator(modifier = Modifier.width(20.dp).heightIn(min = 20.dp), strokeWidth = 2.dp)
-            Text(androidx.compose.ui.res.stringResource(R.string.update_checking))
+            val checking = androidx.compose.ui.res.stringResource(R.string.update_checking)
+            CircularProgressIndicator(
+                modifier = Modifier.width(20.dp).heightIn(min = 20.dp).semantics { contentDescription = checking },
+                strokeWidth = 2.dp
+            )
+            Text(checking)
         }
         is UpdateState.UpToDate -> {
             Text(androidx.compose.ui.res.stringResource(R.string.update_up_to_date, update.currentVersion))
@@ -1913,10 +1944,14 @@ private fun UpdatePanel(state: SettingsUiState, viewModel: SettingsViewModel, on
         }
         is UpdateState.Downloading -> {
             val ratio = if (update.totalBytes > 0) update.downloadedBytes.toFloat() / update.totalBytes else 0f
-            Text(androidx.compose.ui.res.stringResource(R.string.update_downloading, formatBytes(update.downloadedBytes), formatBytes(update.totalBytes)))
+            val downloading = androidx.compose.ui.res.stringResource(R.string.update_downloading, formatBytes(update.downloadedBytes), formatBytes(update.totalBytes))
+            Text(downloading)
             LinearProgressIndicator(
                 progress = { ratio.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().semantics {
+                    contentDescription = downloading
+                    progressBarRangeInfo = ProgressBarRangeInfo(current = ratio.coerceIn(0f, 1f), range = 0f..1f)
+                }
             )
             TextButton(onClick = viewModel::cancelDownload) { Text(androidx.compose.ui.res.stringResource(R.string.action_cancel)) }
         }
@@ -1976,6 +2011,24 @@ private fun UpdateReadyDialog(versionName: String, onDefer: () -> Unit, onInstal
         }
     )
 }
+
+@Composable
+private fun UsageMeter(label: String, percent: Double) {
+    val fraction = (percent / 100.0).toFloat().coerceIn(0f, 1f)
+    Column(Modifier.fillMaxWidth()) {
+        Text(label)
+        LinearProgressIndicator(
+            progress = { fraction },
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentDescription = label
+                progressBarRangeInfo = ProgressBarRangeInfo(current = fraction, range = 0f..1f)
+            }
+        )
+    }
+}
+
+private fun percentOf(used: Long, total: Long): Double =
+    if (total <= 0L) 0.0 else used.coerceAtLeast(0L) * 100.0 / total
 
 @Composable
 private fun LatencyCard(monitor: io.github.openfinalshell.android.core.monitor.MonitorState) {

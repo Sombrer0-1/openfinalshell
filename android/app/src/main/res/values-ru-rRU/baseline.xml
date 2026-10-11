@@ -70,6 +70,7 @@
     <string name="sftp_connect_body">Подключитесь к серверу, чтобы просматривать файлы.</string>
     <string name="sftp_empty_title">Каталог пуст</string>
     <string name="sftp_empty_body">Здесь нет элементов для отображения.</string>
+    <string name="sftp_directory_entry">Каталог %1$s</string>
     <string name="terminal_no_session">Нет сеанса</string>
     <string name="terminal_select_body">Сначала выберите сохранённое подключение и подключитесь.</string>
     <string name="terminal_connecting">Подключение к %1$s...</string>
@@ -85,6 +86,8 @@
     <string name="monitor_memory">Память %1$s / %2$s</string>
     <string name="monitor_network">Сеть %1$s: приём %2$s/с, передача %3$s/с</string>
     <string name="monitor_disk">Использование диска</string>
+    <string name="monitor_swap">Подкачка %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">Ожидание данных мониторинга</string>
     <string name="monitor_port_traffic">Трафик портов</string>
     <string name="monitor_ports_empty">Нет данных о трафике портов.</string>

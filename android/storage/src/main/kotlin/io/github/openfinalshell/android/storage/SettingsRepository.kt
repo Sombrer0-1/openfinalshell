@@ -53,7 +53,7 @@ data class AndroidSettings(
     companion object {
         const val CURRENT_SCHEMA_VERSION = 2
         const val DOCUMENT_NAME = "android.settings"
-        /** Matches the desktop locale registry, plus Android's explicit follow-system option. */
+        /** Supported locale tags, plus Android's explicit follow-system option. */
         val LANGUAGES = setOf(
             "system", "zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR",
             "ru-RU", "es-ES", "fr-FR", "de-DE", "pt-BR"

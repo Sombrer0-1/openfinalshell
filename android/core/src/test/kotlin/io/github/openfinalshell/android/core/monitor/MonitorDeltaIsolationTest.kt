@@ -3,9 +3,11 @@ package io.github.openfinalshell.android.core.monitor
 import io.github.openfinalshell.android.core.ssh.SshSessionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -69,6 +71,40 @@ class MonitorDeltaIsolationTest {
         usageAfter(session, 1, a1, "A")
         session.reset()
         assertEquals(0.0, usageAfter(session, 2, a2, "A"), 0.001)
+    }
+
+    @Test
+    fun `cancelling the collector is not a sample failure`() {
+        assertThrows(CancellationException::class.java) {
+            monitorLoopFailure(running = true, error = CancellationException("replaced"))
+        }
+    }
+
+    @Test
+    fun `a real sample failure stops only a running collector`() {
+        val failure = monitorLoopFailure(running = true, error = IllegalStateException("exec failed"))
+        assertEquals(false, failure!!.running)
+        assertEquals("exec failed", failure.error)
+        assertNull(monitorLoopFailure(running = false, error = IllegalStateException("late")))
+    }
+
+    @Test
+    fun `the settings interval range is accepted`() {
+        val monitor = session()
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { monitor.start("missing", 61) }
+        }
+        kotlinx.coroutines.runBlocking { monitor.start("missing", 60) }
+        assertEquals(false, monitor.state.value.running)
+        assertEquals("SSH session not found", monitor.state.value.error)
+    }
+
+    @Test
+    fun `a superseded start does not turn sampling back on`() = kotlinx.coroutines.runBlocking {
+        val monitor = session()
+        monitor.start("missing", 30) { false }
+        assertEquals(false, monitor.state.value.running)
+        assertNull(monitor.state.value.error)
     }
 
     /** A frame whose sentinels do not match the requested sequence is ignored outright. */

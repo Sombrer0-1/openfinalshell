@@ -29,6 +29,49 @@ import kotlin.math.roundToInt
 
 internal data class TerminalViewport(val columns: Int, val rows: Int)
 
+internal data class TerminalLayoutSignal(
+    val columns: Int,
+    val rows: Int,
+    val fontPx: Int,
+    val density: Float,
+    val fontScale: Float
+)
+
+internal data class TerminalLayoutEffect(val resize: Boolean, val redraw: Boolean)
+
+/**
+ * Grid changes notify the PTY. Pixel, density, or font changes redraw even when the grid is unchanged,
+ * because the glyph paint was built for the previous metrics.
+ */
+internal fun terminalLayoutEffect(previous: TerminalLayoutSignal?, next: TerminalLayoutSignal): TerminalLayoutEffect {
+    if (previous == null) return TerminalLayoutEffect(resize = true, redraw = true)
+    val gridChanged = previous.columns != next.columns || previous.rows != next.rows
+    val pixelsChanged = previous.fontPx != next.fontPx || previous.density != next.density || previous.fontScale != next.fontScale
+    return TerminalLayoutEffect(resize = gridChanged, redraw = gridChanged || pixelsChanged)
+}
+
+internal data class TerminalLayoutPublication(
+    val effect: TerminalLayoutEffect,
+    val remembered: TerminalLayoutSignal?
+)
+
+/**
+ * A grid change that cannot be delivered is not remembered. onAttached measures before bind()
+ * installs the listener; storing that signal made the later bind look unchanged, so the PTY
+ * stayed at the placeholder size.
+ */
+internal fun publishTerminalLayout(
+    previous: TerminalLayoutSignal?,
+    next: TerminalLayoutSignal,
+    listenerReady: Boolean
+): TerminalLayoutPublication {
+    val effect = terminalLayoutEffect(previous, next)
+    if (effect.resize && !listenerReady) {
+        return TerminalLayoutPublication(effect.copy(resize = false), previous)
+    }
+    return TerminalLayoutPublication(effect, next)
+}
+
 /** Converts measured pixels into a stable PTY viewport, preserving cell boundaries. */
 internal fun measureTerminalViewport(
     width: Int,
@@ -69,8 +112,7 @@ class SshTerminalView @JvmOverloads constructor(
     private var dragStartY = 0f
     private var startTopRow = 0
     private var movedDuringGesture = false
-    private var lastMeasuredColumns = -1
-    private var lastMeasuredRows = -1
+    private var lastSignal: TerminalLayoutSignal? = null
     private var selectionStart: TerminalCell? = null
     /** Invoked only for the user's explicit selection, never a transcript snapshot. */
     var onTextSelected: ((String) -> Unit)? = null
@@ -105,8 +147,7 @@ class SshTerminalView @JvmOverloads constructor(
         resize: (Int, Int) -> Unit
     ) {
         if (controller !== nextController) {
-            lastMeasuredColumns = -1
-            lastMeasuredRows = -1
+            lastSignal = null
             topRow = 0
             selectionStart = null
             selectionEnd = null
@@ -116,18 +157,22 @@ class SshTerminalView @JvmOverloads constructor(
         onResize = resize
         nextController.setFontSize(fontSizeSp)
         nextController.setCursorStyle(cursorStyle)
-        val scaledDensity = resources.displayMetrics.density * resources.configuration.fontScale
-        val requestedSizePx = (nextController.requestedFontSizeSp() * scaledDensity)
-            .roundToInt()
-        if (requestedSizePx != rendererTextSizePx) {
-            rendererTextSizePx = requestedSizePx
-            renderer = TerminalRenderer(requestedSizePx, Typeface.MONOSPACE)
-            // Font metrics determine the number of cells in the measured viewport.
-            lastMeasuredColumns = -1
-            lastMeasuredRows = -1
-        }
+        ensureRenderer(fontPixels())
         updateTerminalSize()
         invalidate()
+    }
+
+    private fun fontPixels(): Int {
+        val scaledDensity = resources.displayMetrics.density * resources.configuration.fontScale
+        return (controller?.requestedFontSizeSp()?.times(scaledDensity) ?: (DEFAULT_FONT_SIZE * scaledDensity))
+            .roundToInt()
+            .coerceAtLeast(1)
+    }
+
+    private fun ensureRenderer(fontPx: Int) {
+        if (fontPx == rendererTextSizePx) return
+        rendererTextSizePx = fontPx
+        renderer = TerminalRenderer(fontPx, Typeface.MONOSPACE)
     }
 
     fun refresh() = invalidate()
@@ -168,8 +213,7 @@ class SshTerminalView @JvmOverloads constructor(
         // a disconnected Compose/ViewModel graph alive across navigation or configuration changes.
         onInput = null
         onResize = null
-        lastMeasuredColumns = -1
-        lastMeasuredRows = -1
+        lastSignal = null
         selectionStart = null
         selectionEnd = null
         super.onDetachedFromWindow()
@@ -268,8 +312,8 @@ class SshTerminalView @JvmOverloads constructor(
     }
 
     private fun updateTerminalSize() {
-        val terminal = controller?.emulator ?: return
-        if (width == 0 || height == 0) return
+        if (controller?.emulator == null || width == 0 || height == 0) return
+        ensureRenderer(fontPixels())
         val fontWidth = renderer.getFontWidth().takeIf { it.isFinite() && it > 0f } ?: return
         val viewport = measureTerminalViewport(
             width = width,
@@ -283,11 +327,17 @@ class SshTerminalView @JvmOverloads constructor(
             minColumns = MIN_COLUMNS,
             minRows = MIN_ROWS
         ) ?: return
-        if (viewport.columns != lastMeasuredColumns || viewport.rows != lastMeasuredRows) {
-            lastMeasuredColumns = viewport.columns
-            lastMeasuredRows = viewport.rows
-            onResize?.invoke(viewport.columns, viewport.rows)
-        }
+        val signal = TerminalLayoutSignal(
+            columns = viewport.columns,
+            rows = viewport.rows,
+            fontPx = rendererTextSizePx,
+            density = resources.displayMetrics.density,
+            fontScale = resources.configuration.fontScale
+        )
+        val publication = publishTerminalLayout(lastSignal, signal, onResize != null)
+        lastSignal = publication.remembered
+        if (publication.effect.redraw) invalidate()
+        if (publication.effect.resize) onResize?.invoke(viewport.columns, viewport.rows)
     }
 
     private fun activeTranscriptRows(): Int {

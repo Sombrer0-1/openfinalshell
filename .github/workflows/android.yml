@@ -7,7 +7,6 @@ on:
       - "android/**"
       - "shared-schema/**"
       - "scripts/generateSharedSchema.mjs"
-      - "src/shared/generated/**"
       - ".github/workflows/android.yml"
       - ".github/workflows/android-release.yml"
   pull_request:
@@ -15,7 +14,6 @@ on:
       - "android/**"
       - "shared-schema/**"
       - "scripts/generateSharedSchema.mjs"
-      - "src/shared/generated/**"
       - ".github/workflows/android.yml"
       - ".github/workflows/android-release.yml"
   workflow_dispatch:
@@ -81,7 +79,7 @@ jobs:
         run: node scripts/generateSharedSchema.mjs
 
       - name: Verify generated schema is committed
-        run: git diff --exit-code -- src/shared/generated android/core/src/main/kotlin/io/github/openfinalshell/android/core/protocol
+        run: git diff --exit-code -- android/core/src/main/kotlin/io/github/openfinalshell/android/core/protocol
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

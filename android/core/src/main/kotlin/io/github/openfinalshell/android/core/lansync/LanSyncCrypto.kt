@@ -8,9 +8,9 @@ import org.bouncycastle.crypto.generators.SCrypt
 object LanSyncCrypto {
     fun derivePairKey(code: CharArray, sharedSecret: ByteArray, salt: ByteArray, transcript: ByteArray): ByteArray {
         val prk = hmac(salt, sharedSecret)
-        // Must match src/main/lansync/pairing.ts exactly.  The prefix is part of
-        // the wire contract, so a spelling change makes the two clients derive
-        // different pair keys even when every other input is identical.
+        // The prefix is part of the LAN Sync wire contract. A spelling change
+        // makes two clients derive different pair keys even when every other
+        // input is identical.
         val info = "ofs-lansync-v1".toByteArray() + transcript
         val channelSeed = hkdfExpand(prk, info, 32)
         return SCrypt.generate(String(code).toByteArray(Charsets.UTF_8), channelSeed, 32768, 8, 1, 32)

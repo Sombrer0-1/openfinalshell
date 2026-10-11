@@ -134,8 +134,7 @@ dependencies {
 }
 
 /**
- * Keep all Android UI translations at the same completeness bar as the desktop
- * `check:i18n` task. Include older screens as well as the new ported features.
+ * Keep every selectable Android locale complete, including older screens and newer features.
  */
 val settingsI18nKeys = setOf(
     "settings_title", "settings_general", "settings_language", "settings_language_system",

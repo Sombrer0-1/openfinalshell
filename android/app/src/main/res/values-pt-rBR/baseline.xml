@@ -68,6 +68,7 @@
     <string name="sftp_connect_body">Conecte-se a um servidor para navegar pelos arquivos.</string>
     <string name="sftp_empty_title">O diretório está vazio</string>
     <string name="sftp_empty_body">Não há itens para exibir aqui.</string>
+    <string name="sftp_directory_entry">Diretório %1$s</string>
     <string name="terminal_no_session">Nenhuma sessão</string>
     <string name="terminal_select_body">Selecione uma conexão salva e conecte-se primeiro.</string>
     <string name="terminal_connecting">Conectando a %1$s...</string>
@@ -83,6 +84,8 @@
     <string name="monitor_memory">Memória %1$s / %2$s</string>
     <string name="monitor_network">Rede %1$s: recebimento %2$s/s, envio %3$s/s</string>
     <string name="monitor_disk">Uso do disco</string>
+    <string name="monitor_swap">Swap %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">Aguardando dados de monitoramento</string>
     <string name="monitor_port_traffic">Tráfego das portas</string>
     <string name="monitor_ports_empty">Nenhum dado de tráfego das portas.</string>

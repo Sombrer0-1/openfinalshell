@@ -69,6 +69,7 @@
     <string name="sftp_connect_body">サーバーに接続するとファイルを参照できます。</string>
     <string name="sftp_empty_title">ディレクトリは空です</string>
     <string name="sftp_empty_body">表示する項目はありません。</string>
+    <string name="sftp_directory_entry">ディレクトリ %1$s</string>
     <string name="terminal_no_session">セッションなし</string>
     <string name="terminal_select_body">まず保存済みの接続を選択して接続してください。</string>
     <string name="terminal_connecting">%1$s に接続中...</string>
@@ -84,6 +85,8 @@
     <string name="monitor_memory">メモリ %1$s / %2$s</string>
     <string name="monitor_network">ネットワーク %1$s：受信 %2$s/s、送信 %3$s/s</string>
     <string name="monitor_disk">ディスク使用状況</string>
+    <string name="monitor_swap">スワップ %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">監視データを待機中</string>
     <string name="monitor_port_traffic">ポート通信量</string>
     <string name="monitor_ports_empty">ポート通信量データはありません。</string>

@@ -5,8 +5,8 @@ import androidx.annotation.StringRes
 import androidx.core.os.LocaleListCompat
 
 /**
- * Android mirror of src/shared/locales/registry.ts. Keep tags in BCP 47 form so Android,
- * Electron exports, and platform language settings all describe the same language choice.
+ * Locale tags stay in BCP 47 form so Android resources and exported settings
+ * describe the same language choice.
  */
 object AndroidLocales {
     const val SYSTEM = "system"
@@ -18,7 +18,7 @@ object AndroidLocales {
         "ru-RU", "es-ES", "fr-FR", "de-DE", "pt-BR"
     )
 
-    /** Endonyms intentionally stay unchanged, matching the desktop language selector. */
+    /** Endonyms stay unchanged; each language is labeled in that language. */
     val options = listOf(
         Option(SYSTEM, R.string.settings_language_system),
         Option("zh-CN", R.string.settings_language_zh_cn),
