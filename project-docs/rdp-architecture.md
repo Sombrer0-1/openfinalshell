@@ -2,8 +2,8 @@
 
 > ARCH-01；版本 1；2026-09-03
 >
-> 本文是 `project-docs/rdp-task-matrix.md` 的协议补充。它冻结 Worker、Electron
-> main、preload 和 renderer 之间的行为，后续实现任务不得自行改变字段、状态或失败语义。
+> 本文冻结 Worker、Electron
+> main、preload 和 renderer 之间的行为，后续实现不得自行改变字段、状态或失败语义。
 
 ## 1. 目标与边界
 
@@ -14,7 +14,7 @@ FreeRDP 生命周期由 main 管理。
 
 v1 只实现桌面画面、键盘、鼠标、动态分辨率、TLS/NLA、证书一次性确认和基础剪贴板。
 服务端模式、音频、打印机、磁盘、摄像头、智能卡、USB、设备重定向、多显示器和长期
-证书信任库不在本契约内。Android 只保留共享 profile/schema 的可解析性。
+证书信任库不在本契约内。
 
 系统 RDP 客户端是显式降级动作：用户点击“使用系统远程桌面”后才调用现有
 `conn:launchRdp`。Worker 缺失、版本不兼容或连接失败不能自动打开外部窗口。

@@ -127,7 +127,7 @@ describe('RdpSessionManager protocol/state behavior', () => {
   })
 
   it('returns a failed session identity when the packaged worker is missing so fallback remains explicit', async () => {
-    process.env.OFS_RDP_WORKER = 'E:\\openfinalshell\\missing-rdp-worker.exe'
+    process.env.OFS_RDP_WORKER = 'C:\\nonexistent\\missing-rdp-worker.exe'
     const { RdpSessionManager } = await import('../../src/main/rdp/RdpSessionManager')
     const manager = new RdpSessionManager()
     const { sessionId } = manager.open('profile-1', { width: 1280, height: 720, dpi: 96 })

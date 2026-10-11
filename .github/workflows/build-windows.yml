@@ -613,9 +613,6 @@ jobs:
           | `*-linux-x86_64.flatpak` | x64 Linux 的 Flatpak 安装包 |
           | `*-x64.dmg` / `*-arm64.dmg` | macOS 安装镜像 |
           | `*-x64.zip` / `*-arm64.zip` | macOS 免安装压缩包 |
-          | `*-android-*.apk` | Android APK（按 ABI 提供，含 universal 版） |
-          | `*-android.aab` | Android App Bundle（用于应用商店发布） |
-          | `SHA256SUMS-android.txt` | Android APK/AAB 校验和 |
 
           Windows 安装版免管理员权限，默认装到 `%LOCALAPPDATA%`，可改安装目录。
 
@@ -649,7 +646,7 @@ jobs:
           # v0.1.0-rc1 这类带后缀的 tag 视为预发布
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease=(--prerelease); fi
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "更新现有 Release $GITHUB_REF_NAME（保留 Android 资产）"
+            echo "更新现有 Release $GITHUB_REF_NAME"
             gh release edit "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
               --title "OpenFinalShell $GITHUB_REF_NAME" \
@@ -663,7 +660,7 @@ jobs:
               "${prerelease[@]}"
           fi
 
-          # 只清理桌面资产，保留 Android 工作流可能已经上传的 APK/AAB。
+          # 清理旧桌面资产后再上传，避免重发 tag 时留下过期文件。
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
             while IFS= read -r asset; do
               case "$asset" in

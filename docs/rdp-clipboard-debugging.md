@@ -24,7 +24,7 @@ Close the application before launching a newly built copy with tracing enabled:
 
 ```powershell
 $env:OFS_RDP_CLIPBOARD_TRACE = '1'
-& 'E:\openfinalshell\release\win-unpacked\OpenFinalShell.exe'
+& .\release\win-unpacked\OpenFinalShell.exe
 ```
 
 This is an opt-in worker diagnostic. It records capability flags, selection

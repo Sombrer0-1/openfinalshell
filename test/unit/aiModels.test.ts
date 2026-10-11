@@ -3,7 +3,7 @@ import { parseAiModels } from '../../src/main/services/aiModels'
 import fixture from '../../shared-schema/fixtures/ai-model-inputs.json'
 
 describe('AI model input metadata', () => {
-  it('matches the Android shared metadata fixture', () => {
+  it('matches the shared metadata fixture', () => {
     expect(parseAiModels(fixture.payload).map(row => ({ id: row.id, image: row.input.image }))).toEqual(fixture.expected)
   })
   it('keeps ID-only DeepSeek and OpenAI listings unknown regardless of model names', () => {

@@ -283,7 +283,6 @@ renderer 的 `rdpPortEpoch` 是隔离机制。旧 Worker 的 stdout、exit、sta
 | macOS | 当前不启用原生 Worker，直到构建、依赖、签名、公证、真实服务器证据齐全 | 不宣称嵌入式 RDP；提供系统 fallback 能力时明确提示 |
 | Linux | 当前不启用原生 Worker，直到目标发行版运行时依赖和真实验收齐全 | 同上，不打包 mock 冒充原生支持 |
 | Windows ARM64 | 当前不启用原生 Worker，直到架构构建和验收齐全 | 同上 |
-| Android | 只有 shared profile/schema 兼容性；本轮不实现 RDP UI/engine | 不得以 profile 可解析宣传 Android 原生 RDP |
 
 系统 fallback 由 `src/main/services/rdpLaunch.ts` 生成不含密码的 `.rdp` 文件并调用
 `shell.openPath`。fallback 错误以本地化 toast 呈现；它不改变嵌入式 tab 的失败状态，也不
@@ -321,8 +320,7 @@ npm run typecheck
 `conn:launchRdp` 测试不回归；生产 Worker HELLO 不是 mock；所有协议错误可确定地失败；
 密码不出现在 argv、日志、普通 renderer state、`.rdp` 或仓库。
 
-现有证据与缺口记录见 `project-docs/rdp-native-worker-audit.md`、
-`project-docs/rdp-native-orchestration-plan.md` 和 `project-tasks/rdp-native-tasklist.md`。
+现有证据与缺口记录见 `project-docs/rdp-native-worker-audit.md`。
 
 ## 10. 未决事项（不阻塞协议派发）
 

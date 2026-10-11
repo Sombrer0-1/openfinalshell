@@ -1,6 +1,6 @@
 # Desktop UI design system
 
-This refresh adapts the WebUI design reference to the existing Electron/React workstation. It retains session tabs, resizable workspaces, Ant Design's complex interaction primitives, xterm, CodeMirror, the native RDP renderer, and all ten interface languages. Android is independent.
+This refresh adapts the WebUI design reference to the existing Electron/React workstation. It retains session tabs, resizable workspaces, Ant Design's complex interaction primitives, xterm, CodeMirror, the native RDP renderer, and all ten interface languages.
 
 ## Theme ownership
 

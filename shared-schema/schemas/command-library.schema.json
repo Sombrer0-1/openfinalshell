@@ -19,5 +19,5 @@
       }}
     }
   },
-  "$comment": "Part of the existing v1/v2 export data and encrypted LAN sync. Android requires an explicit Execute action even if imported autoEnter is true. AI profiles, Token references, history and conversations are excluded."
+  "$comment": "Part of the existing v1/v2 export data and encrypted LAN sync. Imported commands never auto-run: execution requires an explicit action even if autoEnter is true. AI profiles, Token references, history and conversations are excluded."
 }

@@ -2,10 +2,7 @@
 
 OpenFinalShell 是一个开源、跨平台的远程运维工作台，集成 SSH 终端、SFTP 文件管理、嵌入式 RDP 远程桌面、AI 助手、在线编辑、服务器监控和端口转发。你可以在同一应用中管理 Linux 服务器和 Windows 远程桌面，传输文件、修改配置、查看运行状态，并按需调用自己的 AI API 辅助排障。
 
-项目由两部分组成：
-
-- **桌面端**：基于 Electron、React 和 TypeScript，提供 Windows x86/x64/ARM64、macOS Intel x64 / Apple Silicon ARM64、Linux x64/ARM64 安装包；Flatpak 目前仅提供 x64。
-- **Android 端**：独立的 Kotlin 原生客户端，使用 Jetpack Compose、Apache MINA SSHD、Room 和 Android Keystore，支持 API 26 及以上的常见 CPU 架构。
+项目为**桌面端**应用：基于 Electron、React 和 TypeScript，提供 Windows x86/x64/ARM64、macOS Intel x64 / Apple Silicon ARM64、Linux x64/ARM64 安装包；Flatpak 目前仅提供 x64。
 
 核心能力：
 
@@ -16,7 +13,7 @@ OpenFinalShell 是一个开源、跨平台的远程运维工作台，集成 SSH 
 - **Windows 多实例**：在设置中开启多个独立窗口，连接配置和凭据共享，会话、传输和窗口退出互相隔离。
 - **数据与界面**：系统安全存储、加密导入导出、局域网配对传送、10 种界面语言、主题和缩放设置。
 
-桌面端与 Android 的功能范围不同。下表按当前代码和发布配置列出支持情况；构建通过不等于已完成所有远程服务器、文件管理器和显示环境的实机验收。
+下表按当前代码和发布配置列出各桌面平台支持情况；构建通过不等于已完成所有远程服务器、文件管理器和显示环境的实机验收。
 
 | 平台 | SSH / SFTP | 嵌入式 RDP | RDP 原生双向文件粘贴 | AI 助手 | 独立多实例窗口 |
 | --- | --- | --- | --- | --- | --- |
@@ -24,13 +21,8 @@ OpenFinalShell 是一个开源、跨平台的远程运维工作台，集成 SSH 
 | Windows x86 / ARM64 | 支持 | 未打包 Worker，可使用系统 RDP | 由系统 RDP 客户端提供 | 支持 | 支持，设置中开启 |
 | macOS x64 / ARM64 | 支持 | 真实 FreeRDP Worker | 缓存后原生粘贴已接入，待实机验收、默认关闭 | 支持 | 已适配，待验收 |
 | Linux x64 / ARM64 | 支持 | 真实 FreeRDP Worker | 缓存后原生粘贴已接入，待实机验收、默认关闭 | 支持 | 已适配，待验收 |
-| Android 8.0+ | 原生客户端，本轮补齐代理、SAF、编辑和本地终端 | 暂不支持 | 暂不支持 | 已接入，APK 与模拟器测试通过，待实机验收 | 不适用 |
-
-Android 的**本地终端**在本机上直接运行 shell，分三档权限：应用自身、ADB shell（uid 2000，经 Shizuku）、root（uid 0，经 Shizuku-as-root 或 `su`）。档位每次连接时重新探测而非缓存。终端、文件、监控与 AI 助手都接入了本地会话 —— 它实现的是同一个 `SshTransport` 契约。root 档在构建开关之外还需在设置中显式开启，每次连接前弹确认说明 uid 0 能读到本应用保存的凭据，且确认不落盘。应用档在未授予「所有文件访问权限」时看不到 `/sdcard`；ADB 与 root 档的 PTY 由随包的可执行 `libofspty.so` 在特权进程中分配。特权档与 root 档尚待实机验收。
 
 macOS/Linux 的 RDP 基础连接、画面、键鼠和缩放已有实现。本轮将文本剪贴板替换为 macOS NSPasteboard 与 Linux GTK3 原生接口，不再依赖 `pbcopy`、`xclip` 或 `wl-clipboard`。文件粘贴采用完整下载到私有缓存后再发布文件 URL 的方式；新增音频后端和多实例适配仍受实机验收门槛控制。当前仅有 Windows 验证环境，不能将这些代码接入视为 macOS/Linux 正式验收通过。系统 RDP 入口仍通过 `.rdp` 文件调用已安装的默认处理程序。
-
-本轮逐项实现和验证状态见 [多端增量移植记录](docs/platform-port-status.md)。
 
 [下载最新版本](https://github.com/kexue-aihao/openfinalshell/releases/latest) · [多实例说明](docs/multi-instance.md) · [AI 模型与图片检测](docs/ai-model-capabilities.md) · [RDP 文件传输诊断](docs/rdp-clipboard-debugging.md)
 
@@ -226,7 +218,7 @@ macOS 常用快捷键采用 Cmd / Option 语义，以“设置 → 快捷键”�
 
 ## 安装
 
-到 [最新正式版](https://github.com/kexue-aihao/openfinalshell/releases/latest) 下载安装包。当前发布矩阵为 Windows x86/x64/ARM64、Linux x64/ARM64、macOS Intel x64 / Apple Silicon ARM64，以及 Android 各 ABI APK 和 AAB：
+到 [最新正式版](https://github.com/kexue-aihao/openfinalshell/releases/latest) 下载安装包。当前发布矩阵为 Windows x86/x64/ARM64、Linux x64/ARM64 和 macOS Intel x64 / Apple Silicon ARM64：
 
 当前不提供 Linux i386 / ARMv7 或 macOS Universal 包；Flatpak 仅提供 x64。Linux i386 缺少 Electron 43 官方运行时。
 
@@ -244,10 +236,8 @@ macOS 常用快捷键采用 Cmd / Option 语义，以“设置 → 快捷键”�
 | `OpenFinalShell-<版本>-linux-x86_64.flatpak` | x86_64 Flatpak 包 |
 | `OpenFinalShell-<版本>.dmg` / `OpenFinalShell-<版本>-arm64.dmg` | macOS Intel / Apple Silicon 安装镜像 |
 | `OpenFinalShell-<版本>-mac.zip` / `OpenFinalShell-<版本>-arm64-mac.zip` | macOS Intel / Apple Silicon 压缩包 |
-| `OpenFinalShell-<版本>-android-{arm64-v8a,armeabi-v7a,x86_64,x86,universal}.apk` | Android APK |
-| `OpenFinalShell-<版本>-android.aab` | Android App Bundle |
 
-同目录的 `SHA256SUMS.txt` 和 `SHA256SUMS-android.txt` 可校验（另有 `latest-*.yml` 与 `*.blockmap`，那是更新检查元数据，不用手工下载）。Windows 和 macOS 安装包暂未做代码签名，首次运行可能出现系统安全提示；Linux 同时提供 Debian、RPM 和 AppImage 包，Flatpak 目前提供 x86_64 版本。
+同目录的 `SHA256SUMS.txt` 可校验（另有 `latest-*.yml` 与 `*.blockmap`，那是更新检查元数据，不用手工下载）。Windows 和 macOS 安装包暂未做代码签名，首次运行可能出现系统安全提示；Linux 同时提供 Debian、RPM 和 AppImage 包，Flatpak 目前提供 x86_64 版本。
 
 Linux 包的可运行范围取决于系统库版本，RPM/AppImage 文件格式不代表兼容所有旧发行版。当前源码通过 GTK3 接入 X11/Wayland 的 RDP 文本剪贴板，无需安装 `xclip` 或 `wl-clipboard`；对应发布包仍需验证 GTK3 运行库和桌面会话访问，Flatpak 另需验收沙箱权限。
 
@@ -266,7 +256,7 @@ sudo apt install ./OpenFinalShell-<版本>-debian13-amd64.deb
 - **直接盖装**：下新版安装包双击即可，不必先卸载，数据也不会丢
   （安装器升级时会给旧卸载器传 `--updated`，`deleteAppDataOnUninstall` 那条清理被跳过）。
 
-Windows 免安装版通过下载新版替换；Linux 检查新版后打开 Releases，不在应用内提权安装。macOS 当前发布资产未提供自动更新 feed，请下载对应架构的 DMG/ZIP 更新。Android 提供 APK 下载、校验和系统安装流程。多实例下的 Windows 安装更新会先汇总各窗口活动，并协调退出。
+Windows 免安装版通过下载新版替换；Linux 检查新版后打开 Releases，不在应用内提权安装。macOS 当前发布资产未提供自动更新 feed，请下载对应架构的 DMG/ZIP 更新。多实例下的 Windows 安装更新会先汇总各窗口活动，并协调退出。
 
 ## 技术栈
 
@@ -291,34 +281,8 @@ src/main      SSH / SFTP / RDP 会话 / AI / 监控 / 转发 / 存储 / 实例�
 src/preload   白名单桥
 src/renderer  React 界面（features 按功能分目录，stores 用 zustand）
 native        FreeRDP Worker、剪贴板与协议测试
-android       Kotlin / Compose 原生客户端
-shared-schema 跨桌面与 Android 的数据契约
+shared-schema 机器可读的数据契约（JSON Schema 与协议样例）
 ```
-
-### Android 原生客户端
-
-仓库同时包含独立的 Kotlin Android 客户端（`android/`）。它不加载 Electron
-或 Node.js，而是通过 Apache MINA SSHD、Jetpack Compose、Room 和 Android
-Keystore 实现原生连接体验。跨端数据协议定义在 `shared-schema/`，保持现有
-监控帧、端口流量、LAN Sync 和 v1/v2 导入导出格式兼容。
-
-本地需要 JDK 17 和 Android SDK 35，设置 `JAVA_HOME` 与 `ANDROID_HOME`。仓库自带 Gradle Wrapper，会下载并校验 Gradle 8.10.2，无需全局安装 Gradle。Windows PowerShell：
-
-```text
-npm run android:generate-schema
-.\android\gradlew.bat -p android :app:checkI18n testDebugUnitTest
-.\android\gradlew.bat -p android :app:assembleDebug :app:assembleDebugAndroidTest
-```
-
-macOS/Linux 使用 `sh android/gradlew -p android` 执行相同任务。当前 Windows 开发机已通过 70 项 Android 单元测试和 API 26/35 模拟器各 12 项仪器测试，覆盖导航、数据迁移、凭据隔离及系统文件接口。四种 ABI 及 universal Debug APK、未签名 Release APK/AAB 和完整 lint 均通过；正式签名与实机功能验收另行记录。
-
-Android 支持 API 26 及以上和 `arm64-v8a`、`armeabi-v7a`、`x86_64`、`x86`，另提供 universal APK。桌面端
-`safeStorage`/Windows DPAPI 密文不能直接在 Android 解密，跨设备迁移请使用
-口令保护的加密导出文件。GitHub Actions 会在 Android 相关变更时运行编译、
-单元测试和 API 26/35 仪器测试；推送 `v*` 标签时，签名 APK/AAB 会上传到同一
-Release。Android 发布需要配置 `ANDROID_KEYSTORE_B64`、
-`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和 `ANDROID_KEY_PASSWORD`
-四个仓库 Secrets。Android 现有功能包括 SSH 终端、SFTP、监控、端口转发、连接管理、加密导入导出和局域网传送。本轮源码增加代理连接、SAF 传输、命令库、AI 助手和远程文本编辑，仍需完成真实服务与设备验收；暂不包含嵌入式 RDP 或多实例能力。详见 [Android 文档](android/README.md)。
 
 ## 开发
 
@@ -437,16 +401,16 @@ SFTP 传输走**并发窗口**（同时保持 64 个 32KB 读/写请求在管道
 
 ### 发布（GitHub Actions）
 
-[桌面发布工作流](.github/workflows/build-windows.yml) 构建 Windows x64/ia32/ARM64、macOS x64/ARM64、Linux x64/ARM64 和 Flatpak x64，共 8 个打包任务。[Android 发布工作流](.github/workflows/android-release.yml) 同时生成签名 APK/AAB。
+[桌面发布工作流](.github/workflows/build-windows.yml) 构建 Windows x64/ia32/ARM64、macOS x64/ARM64、Linux x64/ARM64 和 Flatpak x64，共 8 个打包任务。
 
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-把 `X.Y.Z` 替换为待发布版本，并先同步 `package.json`、锁文件及应用内更新说明；可在 `docs/releases/vX.Y.Z.md` 补充发行说明。工作流校验 tag 与包版本一致，通过类型、语言、全量测试和 Windows 多进程冒烟后再打包。当前完整 Release 共 31 个文件：17 个桌面包、6 个 Android 包、3 个 Windows 更新 feed、3 个 blockmap 和 2 份校验和。
+把 `X.Y.Z` 替换为待发布版本，并先同步 `package.json`、锁文件及应用内更新说明；可在 `docs/releases/vX.Y.Z.md` 补充发行说明。工作流校验 tag 与包版本一致，通过类型、语言、全量测试和 Windows 多进程冒烟后再打包。当前完整 Release 共 25 个文件：17 个桌面包、3 个 Windows 更新 feed、3 个 blockmap 和 2 份校验和。
 
-桌面工作流手动触发只生成 artifacts；Android 手动发布要求指定已有 tag。原生 Worker 的构建和依赖校验属于打包门禁，真实服务器/原生文件管理器的验收仍需对应平台环境。
+桌面工作流手动触发只生成 artifacts。原生 Worker 的构建和依赖校验属于打包门禁，真实服务器/原生文件管理器的验收仍需对应平台环境。
 
 三点踩过的坑：
 
@@ -583,9 +547,9 @@ git push origin vX.Y.Z
 | v0.30.x | 嵌入式 FreeRDP 桌面、自适应显示；Windows x64 文件拖放/双向粘贴和音频 | 已提供，平台差异见支持表 |
 | v0.30.x | AI 服务配置、模型列表、图片检测、流式/非流式响应、命令复制与填入 SSH | ✅ 桌面端 |
 | v0.30.x | Windows 多实例设置开关、运行态隔离、配置共享及更新协调 | ✅ Windows |
-| 已实现 | Windows 安装版应用内更新、Android 签名 APK/AAB 发布 | ✅ |
+| 已实现 | Windows 安装版应用内更新 | ✅ |
 
-待完善：macOS/Linux 原生 RDP 文件剪贴板与音频、这些平台的多实例验收、Windows x86/ARM64 嵌入式 Worker、Android AI/RDP、跳板机 ProxyJump、主密码保险库、传输队列持久化、上传方向打包传输和快捷键改键。此列表不代表交付日期或已开放能力。
+待完善：macOS/Linux 原生 RDP 文件剪贴板与音频、这些平台的多实例验收、Windows x86/ARM64 嵌入式 Worker、跳板机 ProxyJump、主密码保险库、传输队列持久化、上传方向打包传输和快捷键改键。此列表不代表交付日期或已开放能力。
 
 ## 许可
 

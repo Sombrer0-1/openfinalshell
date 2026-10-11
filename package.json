@@ -34,9 +34,7 @@
     "smoke:rdp-worker": "node scripts/smokeRdpWorker.mjs",
     "check:deb": "node scripts/checkDeb.mjs",
     "check:linux-artifacts": "node scripts/checkLinuxArtifacts.mjs",
-    "android:generate-schema": "node scripts/generateSharedSchema.mjs",
-    "android:test": "gradle -p android testDebugUnitTest",
-    "android:assemble": "npm run android:generate-schema && gradle -p android :app:assembleDebug"
+    "generate-schema": "node scripts/generateSharedSchema.mjs"
   },
   "dependencies": {
     "electron-log": "^5.4.4",
