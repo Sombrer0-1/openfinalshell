@@ -54,8 +54,11 @@ internal class MinaShellChannel(private val channel: ChannelShell) : ShellChanne
 
     override suspend fun resize(cols: Int, rows: Int) {
         require(cols > 0 && rows > 0)
-        channel.setPtyColumns(cols)
-        channel.setPtyLines(rows)
+        withContext(Dispatchers.IO) {
+            // setPtyColumns only updates the local config used at channel open. After the shell
+            // is up, the server learns the new size from an SSH window-change request.
+            channel.sendWindowChange(cols, rows)
+        }
     }
 
     override suspend fun close() {

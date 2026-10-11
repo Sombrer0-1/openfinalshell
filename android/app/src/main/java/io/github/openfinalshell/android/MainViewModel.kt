@@ -54,6 +54,7 @@ import io.github.openfinalshell.android.local.appTierRoots
 import io.github.openfinalshell.android.local.privilegedTierRoots
 import io.github.openfinalshell.android.terminal.SshTerminalController
 import io.github.openfinalshell.android.terminal.TerminalHostController
+import io.github.openfinalshell.android.terminal.TerminalSizeTracker
 import io.github.openfinalshell.android.storage.AndroidCredentialStore
 import io.github.openfinalshell.android.storage.AppDatabase
 import io.github.openfinalshell.android.storage.ProfileRepository
@@ -137,8 +138,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val privateKeys = PrivateKeyRepository(database.privateKeys(), credentialStore)
     private val shells = mutableMapOf<String, ShellChannel>()
     private val shellOutputJobs = mutableMapOf<String, Job>()
-    /** Prevent a recomposition or reconnect event from opening a second PTY for one session. */
-    private val openingShells = mutableSetOf<String>()
+    /** One size tracker per session so an in-flight open keeps the latest measurement. */
+    private val terminalSizes = mutableMapOf<String, TerminalSizeTracker>()
+    private val terminalResizeLocks = mutableMapOf<String, Mutex>()
     /** Terminal controllers keep VT parsing and rendering state out of Compose text nodes. */
     private val terminalControllers = mutableMapOf<String, TerminalHostController>()
     private var monitorJob: Job? = null
@@ -1459,14 +1461,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openShell(sessionId: String, cols: Int, rows: Int) {
-        if (shells.containsKey(sessionId)) {
-            resizeTerminal(sessionId, cols, rows)
-            return
-        }
-        if (!openingShells.add(sessionId)) return
+        val tracker = terminalSizes.getOrPut(sessionId) { TerminalSizeTracker() }
+        val openSize = tracker.beginOpen(cols, rows) ?: return
         viewModelScope.launch {
+            var opened = false
             try {
-                val shell = sessions.openShell(sessionId, cols, rows)
+                val shell = sessions.openShell(sessionId, openSize.cols, openSize.rows)
                 shells[sessionId] = shell
                 val controller: TerminalHostController = if (shell.ownsEmulator) {
                     // A channel that owns its emulator already renders its own bytes; it exposes the
@@ -1478,8 +1478,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     SshTerminalController(
                         inputScope = viewModelScope,
                         inputSink = { bytes -> shell.write(bytes) },
-                        initialCols = cols.coerceAtLeast(1),
-                        initialRows = rows.coerceAtLeast(1),
+                        initialCols = openSize.cols,
+                        initialRows = openSize.rows,
                         scrollbackLines = transferSettings.terminalScrollbackLines
                     )
                 }
@@ -1496,10 +1496,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
+                tracker.finishOpen(openSize.cols, openSize.rows)
+                opened = true
+                flushTerminalSize(sessionId, shell, controller)
             } catch (error: Throwable) {
+                if (!opened) tracker.failOpen()
                 setStatus(readableError(error, StatusKey.TERMINAL_OPEN_FAILED))
-            } finally {
-                openingShells.remove(sessionId)
             }
         }
     }
@@ -1562,12 +1564,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun terminalController(sessionId: String): TerminalHostController? = terminalControllers[sessionId]
 
     fun resizeTerminal(sessionId: String, cols: Int, rows: Int) {
+        val tracker = terminalSizes.getOrPut(sessionId) { TerminalSizeTracker() }
+        tracker.noteResize(cols, rows)
         val shell = shells[sessionId] ?: return
-        val controller = terminalControllers[sessionId]
-        viewModelScope.launch {
-            runCatching {
-                controller?.resize(cols.coerceAtLeast(1), rows.coerceAtLeast(1))
-                shell.resize(cols.coerceAtLeast(1), rows.coerceAtLeast(1))
+        val controller = terminalControllers[sessionId] ?: return
+        viewModelScope.launch { flushTerminalSize(sessionId, shell, controller) }
+    }
+
+    private suspend fun flushTerminalSize(sessionId: String, shell: ShellChannel, controller: TerminalHostController) {
+        val tracker = terminalSizes[sessionId] ?: return
+        terminalResizeLocks.getOrPut(sessionId) { Mutex() }.withLock {
+            while (true) {
+                val size = tracker.unapplied() ?: break
+                controller.resize(size.cols, size.rows)
+                shell.resize(size.cols, size.rows)
+                tracker.markApplied(size.cols, size.rows)
             }
         }
     }
@@ -1578,7 +1589,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnect(sessionId: String) {
         cancelSessionTransfers(sessionId)
-        openingShells.remove(sessionId)
+        terminalSizes.remove(sessionId)?.reset()
+        terminalResizeLocks.remove(sessionId)
         // Disconnecting drops the root confirmation, so reconnecting has to ask again. The teardown
         // is where the session stops being something the user is actively watching.
         state.value.sessions[sessionId]?.profile?.id?.let { confirmedRootProfiles -= it }
