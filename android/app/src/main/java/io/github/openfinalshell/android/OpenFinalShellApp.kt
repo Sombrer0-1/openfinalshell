@@ -1921,8 +1921,12 @@ private fun UpdatePanel(state: SettingsUiState, viewModel: SettingsViewModel, on
     when (val update = state.update) {
         UpdateState.Idle -> Text(androidx.compose.ui.res.stringResource(R.string.update_not_checked))
         UpdateState.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CircularProgressIndicator(modifier = Modifier.width(20.dp).heightIn(min = 20.dp), strokeWidth = 2.dp)
-            Text(androidx.compose.ui.res.stringResource(R.string.update_checking))
+            val checking = androidx.compose.ui.res.stringResource(R.string.update_checking)
+            CircularProgressIndicator(
+                modifier = Modifier.width(20.dp).heightIn(min = 20.dp).semantics { contentDescription = checking },
+                strokeWidth = 2.dp
+            )
+            Text(checking)
         }
         is UpdateState.UpToDate -> {
             Text(androidx.compose.ui.res.stringResource(R.string.update_up_to_date, update.currentVersion))
@@ -1940,10 +1944,14 @@ private fun UpdatePanel(state: SettingsUiState, viewModel: SettingsViewModel, on
         }
         is UpdateState.Downloading -> {
             val ratio = if (update.totalBytes > 0) update.downloadedBytes.toFloat() / update.totalBytes else 0f
-            Text(androidx.compose.ui.res.stringResource(R.string.update_downloading, formatBytes(update.downloadedBytes), formatBytes(update.totalBytes)))
+            val downloading = androidx.compose.ui.res.stringResource(R.string.update_downloading, formatBytes(update.downloadedBytes), formatBytes(update.totalBytes))
+            Text(downloading)
             LinearProgressIndicator(
                 progress = { ratio.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().semantics {
+                    contentDescription = downloading
+                    progressBarRangeInfo = ProgressBarRangeInfo(current = ratio.coerceIn(0f, 1f), range = 0f..1f)
+                }
             )
             TextButton(onClick = viewModel::cancelDownload) { Text(androidx.compose.ui.res.stringResource(R.string.action_cancel)) }
         }
