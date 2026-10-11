@@ -86,6 +86,8 @@
     <string name="monitor_memory">Память %1$s / %2$s</string>
     <string name="monitor_network">Сеть %1$s: приём %2$s/с, передача %3$s/с</string>
     <string name="monitor_disk">Использование диска</string>
+    <string name="monitor_swap">Подкачка %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">Ожидание данных мониторинга</string>
     <string name="monitor_port_traffic">Трафик портов</string>
     <string name="monitor_ports_empty">Нет данных о трафике портов.</string>

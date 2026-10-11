@@ -84,6 +84,8 @@
     <string name="monitor_memory">Arbeitsspeicher %1$s / %2$s</string>
     <string name="monitor_network">Netzwerk %1$s: Empfang %2$s/s, Versand %3$s/s</string>
     <string name="monitor_disk">Festplattenbelegung</string>
+    <string name="monitor_swap">Auslagerung %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">Warten auf Überwachungsdaten</string>
     <string name="monitor_port_traffic">Port-Datenverkehr</string>
     <string name="monitor_ports_empty">Keine Daten zum Port-Datenverkehr.</string>

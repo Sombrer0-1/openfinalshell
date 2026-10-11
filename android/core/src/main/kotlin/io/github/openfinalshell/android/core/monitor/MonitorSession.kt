@@ -101,7 +101,7 @@ class MonitorSession(
     }
 
     suspend fun start(sessionId: String, intervalSeconds: Int = 2) {
-        require(intervalSeconds in 1..10)
+        require(intervalSeconds in 1..60) { "monitor interval must be 1..60 seconds" }
         val frameSource = source(sessionId)
         val delta = deltaFor(sessionId)
         mutableState.value = mutableState.value.copy(running = true, error = null, available = frameSource.availability)
@@ -132,7 +132,8 @@ class MonitorSession(
                 delay(intervalSeconds * 1_000L)
             }
         } catch (error: Throwable) {
-            if (mutableState.value.running) mutableState.value = mutableState.value.copy(running = false, error = error.message ?: error.javaClass.simpleName)
+            val failure = monitorLoopFailure(mutableState.value.running, error) ?: return
+            mutableState.value = mutableState.value.copy(running = failure.running, error = failure.error)
         }
     }
 
@@ -258,4 +259,13 @@ class MonitorSession(
     }
 
     private companion object { const val RECONNECT_POLL_MS = 1_000L }
+}
+
+internal data class MonitorLoopFailure(val running: Boolean, val error: String?)
+
+/** Cancellation must leave the loop; treating it as a sample error stops a replacement collector. */
+internal fun monitorLoopFailure(running: Boolean, error: Throwable): MonitorLoopFailure? {
+    if (error is CancellationException) throw error
+    if (!running) return null
+    return MonitorLoopFailure(running = false, error = error.message ?: error.javaClass.simpleName)
 }

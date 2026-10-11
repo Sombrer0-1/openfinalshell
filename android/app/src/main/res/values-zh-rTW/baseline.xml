@@ -86,6 +86,8 @@
     <string name="monitor_memory">記憶體 %1$s / %2$s</string>
     <string name="monitor_network">網路 %1$s：下載 %2$s/s，上傳 %3$s/s</string>
     <string name="monitor_disk">磁碟使用量</string>
+    <string name="monitor_swap">置換空間 %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s：%2$.1f%%</string>
     <string name="monitor_waiting_title">正在等待監控資料</string>
     <string name="monitor_port_traffic">連接埠流量</string>
     <string name="monitor_ports_empty">沒有連接埠流量資料。</string>

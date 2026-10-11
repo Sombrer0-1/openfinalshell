@@ -85,6 +85,8 @@
     <string name="monitor_memory">メモリ %1$s / %2$s</string>
     <string name="monitor_network">ネットワーク %1$s：受信 %2$s/s、送信 %3$s/s</string>
     <string name="monitor_disk">ディスク使用状況</string>
+    <string name="monitor_swap">スワップ %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">監視データを待機中</string>
     <string name="monitor_port_traffic">ポート通信量</string>
     <string name="monitor_ports_empty">ポート通信量データはありません。</string>

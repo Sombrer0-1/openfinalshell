@@ -85,6 +85,8 @@
     <string name="monitor_memory">메모리 %1$s / %2$s</string>
     <string name="monitor_network">네트워크 %1$s: 수신 %2$s/s, 송신 %3$s/s</string>
     <string name="monitor_disk">디스크 사용량</string>
+    <string name="monitor_swap">스왑 %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">모니터링 데이터 대기 중</string>
     <string name="monitor_port_traffic">포트 트래픽</string>
     <string name="monitor_ports_empty">포트 트래픽 데이터가 없습니다.</string>

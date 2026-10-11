@@ -154,6 +154,8 @@
     <string name="monitor_memory">Memory %1$s / %2$s</string>
     <string name="monitor_network">Network %1$s: down %2$s/s, up %3$s/s</string>
     <string name="monitor_disk">Disk usage</string>
+    <string name="monitor_swap">Swap %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">Waiting for monitor data</string>
     <string name="monitor_port_traffic">Port traffic</string>
     <string name="monitor_ports_empty">No port traffic data.</string>

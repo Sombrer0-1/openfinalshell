@@ -84,6 +84,8 @@
     <string name="monitor_memory">Memoria %1$s / %2$s</string>
     <string name="monitor_network">Red %1$s: descarga %2$s/s, subida %3$s/s</string>
     <string name="monitor_disk">Uso del disco</string>
+    <string name="monitor_swap">Intercambio %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">Esperando datos de supervisión</string>
     <string name="monitor_port_traffic">Tráfico de puertos</string>
     <string name="monitor_ports_empty">No hay datos de tráfico de puertos.</string>

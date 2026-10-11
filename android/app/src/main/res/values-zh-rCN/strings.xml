@@ -152,6 +152,8 @@
     <string name="monitor_memory">内存 %1$s / %2$s</string>
     <string name="monitor_network">网络 %1$s：下行 %2$s/s，上行 %3$s/s</string>
     <string name="monitor_disk">磁盘使用率</string>
+    <string name="monitor_swap">交换分区 %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s：%2$.1f%%</string>
     <string name="monitor_waiting_title">等待监控数据</string>
     <string name="monitor_port_traffic">端口流量</string>
     <string name="monitor_ports_empty">暂无端口流量数据。</string>

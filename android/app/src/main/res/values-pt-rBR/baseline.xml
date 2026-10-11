@@ -84,6 +84,8 @@
     <string name="monitor_memory">Memória %1$s / %2$s</string>
     <string name="monitor_network">Rede %1$s: recebimento %2$s/s, envio %3$s/s</string>
     <string name="monitor_disk">Uso do disco</string>
+    <string name="monitor_swap">Swap %1$s / %2$s</string>
+    <string name="monitor_disk_entry">%1$s: %2$.1f%%</string>
     <string name="monitor_waiting_title">Aguardando dados de monitoramento</string>
     <string name="monitor_port_traffic">Tráfego das portas</string>
     <string name="monitor_ports_empty">Nenhum dado de tráfego das portas.</string>

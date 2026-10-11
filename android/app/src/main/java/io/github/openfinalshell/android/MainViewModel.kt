@@ -792,10 +792,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startMonitoring(intervalSeconds: Int = 2) {
+    fun startMonitoring(intervalSeconds: Int = transferSettings.monitorIntervalSeconds) {
         val sessionId = state.value.selectedSessionId ?: return setStatus(StatusKey.SESSION_REQUIRED)
+        val interval = intervalSeconds.coerceIn(2, 60)
         monitorJob?.cancel()
-        monitorJob = viewModelScope.launch { monitor.start(sessionId, intervalSeconds) }
+        monitorJob = viewModelScope.launch { monitor.start(sessionId, interval) }
     }
 
     private fun collectStaticInfo(sessionId: String) {
@@ -856,9 +857,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun applyTransferSettings(settings: AndroidSettings) {
         val refresh = transferSettings.sftpShowHiddenFiles != settings.sftpShowHiddenFiles
         val rootGateChanged = transferSettings.localAllowRoot != settings.localAllowRoot
+        val intervalChanged = transferSettings.monitorIntervalSeconds != settings.monitorIntervalSeconds
         transferSettings = settings
         transferQueue.setConcurrency(settings.sftpConcurrency)
         if (refresh && state.value.selectedSessionId != null) browseSftp()
+        if (intervalChanged && monitor.state.value.running) startMonitoring(settings.monitorIntervalSeconds)
         // The root gate changes what a card may offer, so the tiers have to be re-resolved.
         if (rootGateChanged) viewModelScope.launch { refreshLocalTiers() }
     }
