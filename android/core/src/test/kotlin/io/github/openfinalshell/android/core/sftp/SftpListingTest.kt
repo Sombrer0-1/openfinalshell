@@ -17,4 +17,15 @@ class SftpListingTest {
         assertEquals(listOf("mid", "zeta", "A.txt", "b.txt"), orderedSftpEntries(entries).map { it.name })
         assertEquals(listOf("mid", "zeta", "A.txt", "b.txt"), orderedSftpEntries(entries.asReversed()).map { it.name })
     }
+
+    @Test
+    fun `names that fold to the same letters do not follow the server order`() {
+        val forward = listOf(
+            SftpEntry("readme", "/srv/readme", SftpEntry.Type.FILE),
+            SftpEntry("Readme", "/srv/Readme", SftpEntry.Type.FILE)
+        )
+        val expected = listOf("/srv/Readme", "/srv/readme")
+        assertEquals(expected, orderedSftpEntries(forward).map { it.path })
+        assertEquals(expected, orderedSftpEntries(forward.asReversed()).map { it.path })
+    }
 }
