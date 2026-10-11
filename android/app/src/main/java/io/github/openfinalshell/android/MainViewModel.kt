@@ -79,8 +79,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -145,6 +147,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Terminal controllers keep VT parsing and rendering state out of Compose text nodes. */
     private val terminalControllers = mutableMapOf<String, TerminalHostController>()
     private var monitorJob: Job? = null
+    /** Bumped by every start and stop so a superseded loop cannot set running back to true. */
+    private var monitorToken = 0
     private val transferQueue = TransferQueue(viewModelScope)
     private var transferSettings = AndroidSettings()
     private val documents = SafDocuments(application.contentResolver)
@@ -794,9 +798,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startMonitoring(intervalSeconds: Int = transferSettings.monitorIntervalSeconds) {
         val sessionId = state.value.selectedSessionId ?: return setStatus(StatusKey.SESSION_REQUIRED)
+        val token = ++monitorToken
         val interval = intervalSeconds.coerceIn(2, 60)
         monitorJob?.cancel()
-        monitorJob = viewModelScope.launch { monitor.start(sessionId, interval) }
+        monitorJob = viewModelScope.launch {
+            yield()
+            if (token != monitorToken || !isActive) return@launch
+            monitor.start(sessionId, interval) { token == monitorToken && isActive }
+        }
     }
 
     private fun collectStaticInfo(sessionId: String) {
@@ -807,6 +816,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopMonitoring() {
+        monitorToken++
         monitor.stop()
         monitorJob?.cancel()
         monitorJob = null

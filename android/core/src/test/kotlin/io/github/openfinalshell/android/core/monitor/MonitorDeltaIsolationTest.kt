@@ -99,6 +99,14 @@ class MonitorDeltaIsolationTest {
         assertEquals("SSH session not found", monitor.state.value.error)
     }
 
+    @Test
+    fun `a superseded start does not turn sampling back on`() = kotlinx.coroutines.runBlocking {
+        val monitor = session()
+        monitor.start("missing", 30) { false }
+        assertEquals(false, monitor.state.value.running)
+        assertNull(monitor.state.value.error)
+    }
+
     /** A frame whose sentinels do not match the requested sequence is ignored outright. */
     @Test fun aFrameWithMismatchedSentinelsIsIgnored() {
         val session = session()

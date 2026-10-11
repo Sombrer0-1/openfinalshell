@@ -95,19 +95,29 @@ class MonitorSession(
         deltas.remove(sessionId)
     }
 
-    suspend fun start(intervalSeconds: Int = 2) {
+    suspend fun start(intervalSeconds: Int = 2, stillCurrent: () -> Boolean = { true }) {
         val sessionId = sessions.activeSessionId.value ?: error("SSH session is not selected")
-        start(sessionId, intervalSeconds)
+        start(sessionId, intervalSeconds, stillCurrent)
     }
 
-    suspend fun start(sessionId: String, intervalSeconds: Int = 2) {
+    /**
+     * [stillCurrent] is false when a stop, or a newer start, has superseded this call. Checked
+     * again after `running` is set, because that assignment is not a suspension point and a stop
+     * issued in between would otherwise be undone.
+     */
+    suspend fun start(sessionId: String, intervalSeconds: Int = 2, stillCurrent: () -> Boolean = { true }) {
         require(intervalSeconds in 1..60) { "monitor interval must be 1..60 seconds" }
+        if (!stillCurrent()) return
         val frameSource = source(sessionId)
         val delta = deltaFor(sessionId)
         mutableState.value = mutableState.value.copy(running = true, error = null, available = frameSource.availability)
+        if (!stillCurrent()) {
+            mutableState.value = mutableState.value.copy(running = false)
+            return
+        }
         var tick = 0
         try {
-            while (mutableState.value.running) {
+            while (mutableState.value.running && stillCurrent()) {
                 val seq = ++delta.sequence
                 val started = System.nanoTime()
                 try {
@@ -134,6 +144,9 @@ class MonitorSession(
         } catch (error: Throwable) {
             val failure = monitorLoopFailure(mutableState.value.running, error) ?: return
             mutableState.value = mutableState.value.copy(running = failure.running, error = failure.error)
+        }
+        if (!stillCurrent() && mutableState.value.running) {
+            mutableState.value = mutableState.value.copy(running = false)
         }
     }
 
