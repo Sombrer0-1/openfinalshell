@@ -55,7 +55,7 @@ export function SettingsModal(): React.JSX.Element {
   const { message } = AntdApp.useApp()
   const open = useUiStore((s) => s.settingsOpen)
   useEffect(() => {
-    if (open) void ofs.invoke('settings:get').then((settings) => useSettingsStore.setState({ settings })).catch(() => {})
+    if (open) void ofs.invoke('settings:get').then(useSettingsStore.getState().receive).catch(() => {})
   }, [open])
   const setOpen = useUiStore((s) => s.setSettingsOpen)
   const settingsSection = useUiStore((s) => s.settingsSection)

@@ -66,6 +66,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
   const mountRef = useRef<HTMLDivElement>(null)
   const bundleRef = useRef<TerminalBundle | null>(null)
   const termIdRef = useRef<string | null>(null)
+  const ptySizeRef = useRef<{ cols: number; rows: number } | null>(null)
   /**
    * 回车已按下、等换行回来采集的那一条。null = 此刻没有待采集的提交。
    * （为什么要等换行：见 commandCapture.ts 文件头）
@@ -76,17 +77,27 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
   const [historyOpen, setHistoryOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
 
+  const syncPtySize = useCallback((): void => {
+    const term = bundleRef.current?.term
+    const termId = termIdRef.current
+    if (!term || !termId) return
+    const { cols, rows } = term
+    const previous = ptySizeRef.current
+    if (previous?.cols === cols && previous.rows === rows) return
+    ptySizeRef.current = { cols, rows }
+    void ofs.invoke('term:resize', { termId, cols, rows })
+  }, [])
+
   const sendResize = useCallback((): void => {
     const bundle = bundleRef.current
     const el = mountRef.current
     if (!bundle || !el || el.clientWidth === 0 || el.clientHeight === 0) return
-    const before = { cols: bundle.term.cols, rows: bundle.term.rows }
     bundle.fit.fit()
-    const { cols, rows } = bundle.term
-    if (termIdRef.current && (cols !== before.cols || rows !== before.rows)) {
-      void ofs.invoke('term:resize', { termId: termIdRef.current, cols, rows })
-    }
-  }, [])
+    // Rebuild cached glyph positions even if a pixel resize keeps the same grid.
+    bundle.term.clearTextureAtlas()
+    bundle.term.refresh(0, bundle.term.rows - 1)
+    syncPtySize()
+  }, [syncPtySize])
 
   /**
    * 往当前终端写一段**程序生成**的文本（粘贴、命令历史回填）。
@@ -146,6 +157,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     const bundle = createTerminal(settings, uiMode)
     bundleRef.current = bundle
     bundle.term.open(el)
+    bundle.term.onResize(syncPtySize)
 
     bundle.term.onData((data) => {
       const termId = termIdRef.current
@@ -307,6 +319,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         unregisterTerm(dying)
         void ofs.invoke('term:close', dying).catch(() => {})
         termIdRef.current = null
+        ptySizeRef.current = null
         // 同步把 store 里的 termId 清掉。不清的话，万一本组件是被"重挂"而不是真的关掉
         // （父级结构变化就会这样），新实例会看到一个指向已关闭 shell 的 tab.termId，
         // 于是开 shell 的 effect 直接 return —— 留下一个永远空白、也不会自愈的终端。
@@ -341,8 +354,11 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
       .invoke('term:open', { sessionId: tab.sessionId, cols, rows })
       .then(({ termId }) => {
         termIdRef.current = termId
+        ptySizeRef.current = { cols, rows }
         registerTerm(termId, bundle.term)
         bindTerm(tab.id, termId)
+        // Layout may have changed while the SSH shell request was in flight.
+        sendResize()
         if (tab.shellEpoch > 0) {
           bundle.term.write(`\r\n\x1b[2m—— ${i18n.t('terminal.reconnected')} ——\x1b[0m\r\n`)
         }

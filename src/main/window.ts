@@ -49,7 +49,7 @@ export function applyNativeWindowMaterial(
   return applyWindowBackgroundMaterial(win, material)
 }
 
-function applyTitleBarOverlay(
+export function applyTitleBarOverlay(
   win: BrowserWindow,
   chrome: ReturnType<typeof resolveChrome>,
   material: WindowBackgroundMaterial

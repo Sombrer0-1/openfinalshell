@@ -59,6 +59,41 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  user-select: none;
+}
+
+.table input {
+  user-select: text;
+}
+
+.table :global(.ant-table-small .ant-table-tbody-virtual .ant-table-cell),
+.table :global(.ant-table-small .ant-table-tbody .ant-table-cell) {
+  padding-block: 3px;
+  line-height: 20px;
+}
+
+.table:focus-visible {
+  outline: 2px solid var(--ofs-accent);
+  outline-offset: -2px;
+}
+
+.selectedRow > :global(.ant-table-cell) {
+  background: color-mix(in srgb, var(--ofs-accent) 14%, var(--ofs-solid-surface)) !important;
+}
+
+.selectedRow > :global(.ant-table-cell):first-child {
+  box-shadow: inset 2px 0 0 var(--ofs-accent);
+}
+
+.table:focus-within .focusedRow {
+  outline: 1px solid var(--ofs-accent);
+  outline-offset: -1px;
+}
+
+/* rc-table uses max-height for virtual bodies. Keep the horizontal scrollbar
+   at the panel bottom even when the directory has only a few rows. */
+.table :global(.ant-table-tbody-virtual-holder) {
+  height: var(--ofs-sftp-table-body-height);
 }
 
 .nameCell {
@@ -183,11 +218,10 @@
 }
 
 /*
- * 换目录途中占住列表那块地方的骨架。
- * 高度与 Table 的 scroll.y 对齐（220），这样切目录时面板不会先塌一下再弹回来。
+ * 换目录途中占住整个列表区域，与面板可用高度一起伸缩。
  */
 .skeletonWrap {
-  height: 220px;
+  height: 100%;
   padding: 10px 12px;
   overflow: hidden;
 }

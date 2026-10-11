@@ -12,7 +12,7 @@ import type { OfsApi } from '@shared/ipc'
  * 把 window.ofs 捕获进模块常量，晚一步就只能拿到它的 DEV mock。
  */
 
-type AnyHandler = (payload: unknown) => unknown
+type AnyHandler = (payload: unknown, ...args: unknown[]) => unknown
 
 export interface Deferred<T> {
   promise: Promise<T>
@@ -43,14 +43,14 @@ class FakeOfs {
     this.handlers.set(channel, fn)
   }
 
-  invoke(channel: string, payload?: unknown): Promise<unknown> {
+  invoke(channel: string, payload?: unknown, ...args: unknown[]): Promise<unknown> {
     this.invokes.push({ channel, payload })
     const handler = this.handlers.get(channel)
     if (!handler) {
       return Promise.reject(new Error(`fakeOfs: 未注册的 invoke channel「${channel}」`))
     }
     // 统一异步化：真 IPC 永远不会同步回包，同步 resolve 会造出真实环境不存在的时序
-    return Promise.resolve().then(() => handler(payload))
+    return Promise.resolve().then(() => handler(payload, ...args))
   }
 
   send(channel: string, payload: unknown): void {

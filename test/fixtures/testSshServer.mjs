@@ -174,7 +174,12 @@ const server = new Server({ hostKeys: [privateKey] }, (client) => {
           }
         })
 
-        session.on('shell', (acceptShell) => {
+        session.on('shell', async (acceptShell) => {
+          const openDelayMs = Number(process.env.OFS_FIXTURE_SHELL_OPEN_DELAY_MS ?? 0)
+          if (openDelayMs > 0) {
+            console.log('[srv] shell-open-pending')
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, openDelayMs))
+          }
           const stream = acceptShell()
           /**
            * 提示符可切换 —— `ps1 exotic` / `ps1 default`。
@@ -222,6 +227,19 @@ const server = new Server({ hostKeys: [privateKey] }, (client) => {
             if (cmd === 'size') {
               stream.write(`${ptyInfo.cols}x${ptyInfo.rows}\r\n`)
               return prompt()
+            }
+            if (cmd === 'resize-stream') {
+              let count = 0
+              const timer = setInterval(() => {
+                stream.write(`\x1b[32mresize-row-${String(count).padStart(3, '0')}\x1b[0m ${'abcdefgh'.repeat(16)} 中文\r\n`)
+                if (++count === 500) {
+                  clearInterval(timer)
+                  stream.write('[resize-stream-done]\r\n')
+                  prompt()
+                }
+              }, 20)
+              stream.once('close', () => clearInterval(timer))
+              return
             }
             if (cmd.startsWith('echo ')) {
               stream.write(`${cmd.slice(5)}\r\n`)

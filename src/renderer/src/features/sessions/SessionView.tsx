@@ -21,7 +21,7 @@ interface Props {
  */
 export function SessionViewHost({ tabs, activeTabId, uiMode }: Props): React.JSX.Element {
   const settings = useSettingsStore((s) => s.settings)!
-  const patch = useSettingsStore((s) => s.patch)
+  const patchLayout = useSettingsStore((s) => s.patchLayout)
 
   return (
     <div className={styles.host}>
@@ -66,7 +66,7 @@ export function SessionViewHost({ tabs, activeTabId, uiMode }: Props): React.JSX
                       defaultSize={settings.layout.sftpPaneHeightPct}
                       minSize={20}
                       onResize={(size) => {
-                        if (active) patch({ layout: { ...settings.layout, sftpPaneHeightPct: size } })
+                        if (active) patchLayout({ sftpPaneHeightPct: size })
                       }}
                     >
                       <SftpPane tab={tab} active={active} />

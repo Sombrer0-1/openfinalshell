@@ -147,6 +147,8 @@
     "reconnected": "連線已恢復"
   },
   "monitor": {
+    "cpu": "CPU",
+    "cpuCores": "CPU 各核心使用率",
     "title": "伺服器監控",
     "system": "系統",
     "hostname": "主機名稱",
@@ -196,6 +198,7 @@
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
   "sftp": {
+    "fileList": "檔案清單",
     "waitingSession": "等待工作階段…",
     "back": "上一頁",
     "forward": "下一頁",
@@ -593,6 +596,7 @@
     "confirmOk": "中斷連線並安裝"
   },
   "settings": {
+    "saveFailed": "設定儲存失敗或已被其他視窗修改，已重新載入。",
     "section_general": "一般",
     "section_appearance": "外觀",
     "section_terminal": "終端機",

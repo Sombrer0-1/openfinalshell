@@ -58,10 +58,7 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
 
   const history = sessionId
     ? historyOf(sessionId)
-    : { cpu: [], memPct: [], rxBps: [], txBps: [], directLatencyMs: [], connectionLatencyMs: [] }
-  // 历史数组是原地 push/shift（引用不变），spread 成新数组让 MonitorGraph 的
-  // useEffect 依赖能察觉变化；每帧一次、60 点小图，开销可忽略
-  void snapshot?.ts // 依赖锚点：每来一帧本组件重渲染，下面几张图跟着重画
+    : { rxBps: [], txBps: [] }
 
   const header = (
     <PanelHeading title={t('monitor.title')} actions={<>
@@ -126,30 +123,25 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
         {/* CPU */}
         <div className={styles.card}>
           <div className={styles.cardHead}>
-            <span className={styles.cardHeadTitle}>CPU</span>
+            <span className={styles.cardHeadTitle}>{t('monitor.cpu')}</span>
             <span className={styles.subText}>
               {t('monitor.load')} {snapshot.cpu.loadAvg.map((n) => n.toFixed(2)).join(' ')}
             </span>
-            <span className={styles.cardToggle} onClick={() => setShowCores((v) => !v)}>
+            <button type="button" className={styles.cardToggle} aria-label={t('monitor.cpuCores')} aria-expanded={showCores} onClick={() => setShowCores((v) => !v)}>
               {showCores ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            </span>
+            </button>
           </div>
           <div className={styles.bigNumber}>
             {snapshot.cpu.usagePct.toFixed(1)}
             <span className={styles.unit}>%</span>
           </div>
-          <MonitorGraph primary={[...history.cpu]} height={48} max={100} className={styles.graph} />
+          <UsageBar label={t('monitor.cpu')} pct={snapshot.cpu.usagePct} color={usageColor(snapshot.cpu.usagePct, accent)} />
           {showCores && (
             <div className={styles.coreGrid}>
               {snapshot.cpu.perCore.map((pct, i) => (
                 <div key={i} className={styles.coreItem}>
                   <span>{i}</span>
-                  <span className={styles.coreBar}>
-                    <span
-                      className={styles.barFill}
-                      style={{ width: `${pct}%`, background: usageColor(pct, accent) }}
-                    />
-                  </span>
+                  <UsageBar label={`${t('monitor.cpu')} ${i}`} pct={pct} color={usageColor(pct, accent)} className={styles.coreBar} />
                   <span style={{ width: 30, textAlign: 'right' }}>{pct.toFixed(0)}%</span>
                 </div>
               ))}
@@ -158,7 +150,7 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
         </div>
 
         {/* 内存 */}
-        <MemCard snapshot={snapshot} accent={accent} memHistory={[...history.memPct]} />
+        <MemCard snapshot={snapshot} accent={accent} />
 
         {/* 网络 */}
         <button
@@ -207,12 +199,10 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
               <LatencyMetric
                 label={t('monitor.directLatency')}
                 value={snapshot.directLatencyMs}
-                history={[...history.directLatencyMs]}
               />
               <LatencyMetric
                 label={t('monitor.connectionLatency')}
                 value={snapshot.connectionLatencyMs}
-                history={[...history.connectionLatencyMs]}
               />
             </div>
           </div>
@@ -263,12 +253,7 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
                     {formatBytes(fs.usedKb * 1024)} / {formatBytes(fs.totalKb * 1024)}
                   </span>
                 </div>
-                <div className={styles.bar}>
-                  <span
-                    className={styles.barFill}
-                    style={{ width: `${fs.usePct}%`, background: usageColor(fs.usePct, accent) }}
-                  />
-                </div>
+                <UsageBar label={fs.mount} pct={fs.usePct} color={usageColor(fs.usePct, accent)} />
               </div>
             ))}
             {snapshot.diskIo.length > 0 && (
@@ -323,12 +308,10 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
 
 function LatencyMetric({
   label,
-  value,
-  history
+  value
 }: {
   label: string
   value: number | undefined
-  history: number[]
 }): React.JSX.Element {
   const { t } = useTranslation()
   return (
@@ -342,7 +325,6 @@ function LatencyMetric({
           <span className={styles.unit}>ms</span>
         </div>
       )}
-      <MonitorGraph primary={history} height={32} className={styles.graph} />
     </div>
   )
 }
@@ -360,12 +342,10 @@ function Kv({ k, v }: { k: string; v: string }): React.JSX.Element {
 
 function MemCard({
   snapshot,
-  accent,
-  memHistory
+  accent
 }: {
   snapshot: MonitorSnapshot
   accent: string
-  memHistory: number[]
 }): React.JSX.Element {
   const { t } = useTranslation()
   const memPct = usePct(snapshot.mem.usedKb, snapshot.mem.totalKb)
@@ -382,12 +362,7 @@ function MemCard({
         {memPct.toFixed(1)}
         <span className={styles.unit}>%</span>
       </div>
-      <div className={styles.bar}>
-        <span
-          className={styles.barFill}
-          style={{ width: `${memPct}%`, background: usageColor(memPct, accent) }}
-        />
-      </div>
+      <UsageBar label={t('monitor.memory')} pct={memPct} color={usageColor(memPct, accent)} />
       {snapshot.mem.swapTotalKb > 0 && (
         <>
           <div className={styles.kvRow}>
@@ -397,15 +372,22 @@ function MemCard({
               {formatBytes(snapshot.mem.swapTotalKb * 1024)}
             </span>
           </div>
-          <div className={styles.bar}>
-            <span
-              className={styles.barFill}
-              style={{ width: `${swapPct}%`, background: '#722ed1' }}
-            />
-          </div>
+          <UsageBar label="Swap" pct={swapPct} color="#722ed1" />
         </>
       )}
-      <MonitorGraph primary={memHistory} height={40} max={100} className={styles.graph} />
+    </div>
+  )
+}
+
+function UsageBar({ label, pct, color, className = styles.bar }: {
+  label: string
+  pct: number
+  color: string
+  className?: string
+}): React.JSX.Element {
+  return (
+    <div className={className} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+      <span className={styles.barFill} style={{ width: `${pct}%`, background: color }} />
     </div>
   )
 }

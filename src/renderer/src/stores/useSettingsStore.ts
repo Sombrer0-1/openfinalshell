@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AppSettings } from '@shared/types'
 import { ofs } from '@/ipc/api'
+import i18n from '@/i18n'
 
 interface SettingsStore {
   settings: AppSettings | null
@@ -8,6 +9,9 @@ interface SettingsStore {
   init: () => Promise<void>
   /** 局部更新：乐观合并本地 + 持久化到 main */
   patch: (patch: Partial<AppSettings>) => void
+  patchLayout: (patch: Partial<AppSettings['layout']>) => void
+  /** 接收持久化快照，同时保留尚未保存的本地改动。 */
+  receive: (settings: AppSettings) => void
 }
 
 function deepMergeLocal<T>(base: T, patch: unknown): T {
@@ -31,26 +35,80 @@ function deepMergeLocal<T>(base: T, patch: unknown): T {
 
 let initialized = false
 
-export const useSettingsStore = create<SettingsStore>((set, get) => ({
-  settings: null,
+export const useSettingsStore = create<SettingsStore>((set, get) => {
+  let saved: AppSettings | null = null
+  let pending: Partial<AppSettings> = {}
+  let inFlight: Partial<AppSettings> | null = null
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  init: async () => {
-    if (initialized) return
-    initialized = true
-    const settings = await ofs.invoke('settings:get')
-    set({ settings })
-    ofs.on('settings:changed', (next) => set({ settings: next }))
-  },
-
-  patch: (patch) => {
-    const current = get().settings
-    if (!current) return
-    set({ settings: deepMergeLocal(current, patch) })
-    void ofs.invoke('settings:set', patch, current).then((settings) => set({ settings })).catch(async () => {
-      // A stale optimistic write must not leave the UI claiming the save succeeded.
-      const settings = await ofs.invoke('settings:get')
-      set({ settings })
-      window.dispatchEvent(new CustomEvent('ofs:configConflict', { detail: '设置保存失败或已被其他窗口修改，已重新加载。' }))
-    })
+  const receive = (settings: AppSettings): void => {
+    // Keep the expected snapshot of queued edits so peer changes still conflict.
+    if (!inFlight && Object.keys(pending).length === 0) saved = settings
+    set({ settings: deepMergeLocal(deepMergeLocal(settings, inFlight ?? {}), pending) })
   }
-}))
+
+  // Only confirmed snapshots are used for optimistic concurrency checks. The
+  // next write waits for the previous reply; drag frames coalesce in pending.
+  const flush = async (): Promise<void> => {
+    if (inFlight || !saved || Object.keys(pending).length === 0) return
+    const writing = pending
+    pending = {}
+    inFlight = writing
+    try {
+      const settings = await ofs.invoke('settings:set', writing, saved)
+      saved = settings
+      inFlight = null
+      receive(settings)
+    } catch {
+      // A real conflict still reloads rather than overwriting another window.
+      pending = {}
+      try {
+        const settings = await ofs.invoke('settings:get')
+        pending = {}
+        inFlight = null
+        receive(settings)
+      } catch {
+        inFlight = null
+        set({ settings: saved })
+      }
+      window.dispatchEvent(new CustomEvent('ofs:configConflict', { detail: i18n.t('settings.saveFailed') }))
+    }
+    if (!timer) void flush()
+  }
+
+  return {
+    settings: null,
+
+    init: async () => {
+      if (initialized) return
+      initialized = true
+      const settings = await ofs.invoke('settings:get')
+      receive(settings)
+      ofs.on('settings:changed', receive)
+    },
+
+    receive,
+
+    patchLayout: (patch) => {
+      const layout = get().settings?.layout
+      if (layout) get().patch({ layout: { ...layout, ...patch } })
+    },
+
+    patch: (patch) => {
+      const current = get().settings
+      if (!current) return
+      const next = deepMergeLocal(current, patch)
+      if (JSON.stringify(next) === JSON.stringify(current)) return
+      if (!inFlight && Object.keys(pending).length === 0) saved = current
+      pending = deepMergeLocal(pending, patch)
+      set({ settings: next })
+      if (timer) clearTimeout(timer)
+      timer = undefined
+      if (Object.keys(patch).every((key) => key === 'layout')) {
+        timer = setTimeout(() => { timer = undefined; void flush() }, 120)
+      } else {
+        void flush()
+      }
+    }
+  }
+})

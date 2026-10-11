@@ -1,5 +1,6 @@
 import { IconButton, EmptyState, LoadingState, UiButton } from '@/components/ui'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { TableRef } from 'antd/es/table'
 import {
   Alert,
   App as AntdApp,
@@ -89,6 +90,10 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
   const settings = useSettingsStore((s) => s.settings)!
   const patchSettings = useSettingsStore((s) => s.patch)
   const enqueue = useTransferStore((s) => s.enqueue)
+  const tableAreaRef = useRef<HTMLDivElement>(null)
+  const tableRef = useRef<TableRef>(null)
+  const listId = useId()
+  const [tableBodyHeight, setTableBodyHeight] = useState(1)
 
   const [cwd, setCwd] = useState<string>('')
   /**
@@ -103,6 +108,9 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string[]>([])
+  const [focusedPath, setFocusedPath] = useState<string | null>(null)
+  const selectionAnchor = useRef<string | null>(null)
+  const [sort, setSort] = useState<{ field: 'name' | 'size' | 'mtime'; order: 'ascend' | 'descend' } | null>(null)
   const [history, setHistory] = useState<{ stack: string[]; index: number }>({ stack: [], index: -1 })
   const [editingPath, setEditingPath] = useState<string | null>(null)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
@@ -175,6 +183,8 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
         setEntries(list)
         setCwd(dir)
         setSelected([])
+        setFocusedPath(null)
+        selectionAnchor.current = null
         /*
          * 成功就**一定**清错。原先这一句也被 `!silentErrors` 包着，于是：一次失败留下
          * 错误空态 → 之后 cd 跟随（silent）成功了也不清 → 表格被错误空态永久顶掉，
@@ -258,9 +268,22 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
       const aDir = a.type === 'dir' || (a.type === 'symlink' && a.targetType === 'dir')
       const bDir = b.type === 'dir' || (b.type === 'symlink' && b.targetType === 'dir')
       if (aDir !== bDir) return aDir ? -1 : 1
-      return a.name.localeCompare(b.name)
+      const compared = sort?.field === 'size' ? a.size - b.size
+        : sort?.field === 'mtime' ? a.mtime - b.mtime
+        : a.name.localeCompare(b.name)
+      return (sort?.order === 'descend' ? -1 : 1) * compared || a.name.localeCompare(b.name)
     })
-  }, [entries, showHidden])
+  }, [entries, showHidden, sort])
+
+  useEffect(() => {
+    const paths = new Set(visible.map((entry) => entry.path))
+    setSelected((current) => {
+      const next = current.filter((path) => paths.has(path))
+      return next.length === current.length ? current : next
+    })
+    setFocusedPath((current) => current && paths.has(current) ? current : null)
+    if (selectionAnchor.current && !paths.has(selectionAnchor.current)) selectionAnchor.current = null
+  }, [visible])
 
   const isDir = isDirEntry
 
@@ -737,7 +760,8 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
       title: t('sftp.colName'),
       dataIndex: 'name',
       ellipsis: true,
-      sorter: (a: SftpEntry, b: SftpEntry) => a.name.localeCompare(b.name),
+      sorter: true,
+      sortOrder: sort?.field === 'name' ? sort.order : null,
       render: (_: unknown, entry: SftpEntry) => (
         <div className={styles.nameCell}>
           <FileIcon entry={entry} />
@@ -747,9 +771,17 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
               autoFocus
               defaultValue={entry.name}
               onBlur={(e) => void doRename(entry, e.target.value)}
-              onPressEnter={(e) => void doRename(entry, (e.target as HTMLInputElement).value)}
+              onPressEnter={(e) => {
+                void doRename(entry, (e.target as HTMLInputElement).value)
+                requestAnimationFrame(() => tableAreaRef.current?.focus({ preventScroll: true }))
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') setRenamingPath(null)
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setRenamingPath(null)
+                  requestAnimationFrame(() => tableAreaRef.current?.focus({ preventScroll: true }))
+                }
               }}
               onClick={(e) => e.stopPropagation()}
             />
@@ -766,7 +798,8 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
       dataIndex: 'size',
       width: 96,
       align: 'right',
-      sorter: (a: SftpEntry, b: SftpEntry) => a.size - b.size,
+      sorter: true,
+      sortOrder: sort?.field === 'size' ? sort.order : null,
       render: (size: number, entry: SftpEntry) =>
         isDirEntry(entry) ? '-' : <Tooltip title={`${size} B`}>{formatBytes(size)}</Tooltip>
     },
@@ -791,10 +824,11 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
       title: t('sftp.colMtime'),
       dataIndex: 'mtime',
       width: 132,
-      sorter: (a: SftpEntry, b: SftpEntry) => a.mtime - b.mtime,
+      sorter: true,
+      sortOrder: sort?.field === 'mtime' ? sort.order : null,
       render: (mtime: number) => formatTimestamp(mtime)
     }
-  ], [t, renamingPath, doRename])
+  ], [t, renamingPath, doRename, sort])
 
   // Set 成员判定 O(1)：selected 是数组，includes 在选区大时是 O(n·m)。
   // selectedEntries 同样缓存 —— 它喂给 targetsFor，且每次渲染都算一遍没必要
@@ -978,7 +1012,11 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
       close()
     }
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        close()
+      }
     }
     window.addEventListener('pointerdown', onPointerDown, true)
     window.addEventListener('scroll', close, true)
@@ -995,10 +1033,99 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
   // 显示派生（规则与"为什么是纯函数"见 pathSync.navView）
   const { displayDir, navPending } = navView(cwd, pendingDir)
 
+  const rowId = (index: number): string => `${listId}-row-${index}`
+  const focusedIndex = visible.findIndex((entry) => entry.path === focusedPath)
+  const focusList = (): void => tableAreaRef.current?.focus({ preventScroll: true })
+  const focusEntry = (entry: SftpEntry, scroll = false): void => {
+    setFocusedPath(entry.path)
+    if (!scroll) return
+    const row = document.getElementById(rowId(visible.indexOf(entry)))
+    const holder = tableAreaRef.current?.querySelector('.ant-table-tbody-virtual-holder')
+    const rect = row?.getBoundingClientRect()
+    const viewport = holder?.getBoundingClientRect()
+    if (!rect || !viewport || rect.top < viewport.top || rect.bottom > viewport.bottom) {
+      tableRef.current?.scrollTo({ key: entry.path })
+    }
+  }
+  const selectEntry = (entry: SftpEntry, extend: boolean, toggle: boolean): void => {
+    focusEntry(entry)
+    const anchor = visible.findIndex((item) => item.path === selectionAnchor.current)
+    if (extend && anchor >= 0) {
+      const index = visible.indexOf(entry)
+      const range = visible.slice(Math.min(anchor, index), Math.max(anchor, index) + 1).map((item) => item.path)
+      setSelected((current) => toggle ? [...new Set([...current, ...range])] : range)
+    } else {
+      selectionAnchor.current = entry.path
+      setSelected((current) => toggle
+        ? current.includes(entry.path) ? current.filter((path) => path !== entry.path) : [...current, entry.path]
+        : [entry.path])
+    }
+  }
+  const clearSelection = (): void => {
+    setSelected([])
+    setFocusedPath(null)
+    selectionAnchor.current = null
+  }
+  const onFileListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (!active || navPending || error || event.nativeEvent.isComposing) return
+    if (event.target instanceof Element && event.target.closest('input, textarea, select, button, a, [contenteditable="true"]')) return
+    const primary = event.ctrlKey || event.metaKey
+    const focused = visible[focusedIndex] ?? selectedEntries[0]
+    if (primary && event.key.toLowerCase() === 'a') {
+      event.preventDefault()
+      setSelected(visible.map((entry) => entry.path))
+      if (!focused && visible[0]) focusEntry(visible[0])
+      selectionAnchor.current ??= visible[0]?.path ?? null
+    } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && !event.altKey) {
+      event.preventDefault()
+      if (!visible.length) return
+      const index = event.key === 'Home' ? 0 : event.key === 'End' ? visible.length - 1
+        : focusedIndex < 0 ? event.key === 'ArrowUp' ? visible.length - 1 : 0
+        : Math.max(0, Math.min(visible.length - 1, focusedIndex + (event.key === 'ArrowDown' ? 1 : -1)))
+      const entry = visible[index]
+      if (!primary || event.shiftKey) selectEntry(entry, event.shiftKey, primary)
+      focusEntry(entry, true)
+    } else if (event.key === ' ' && focused) {
+      event.preventDefault()
+      selectEntry(focused, event.shiftKey, primary)
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      if (!contextMenu) setSelected([])
+      setContextMenu(null)
+    } else if (event.key === 'Enter' && focused && selectedEntries.length <= 1) {
+      event.preventDefault()
+      openEntry(focused, settings.sftp.doubleClickAction === 'open' ? 'edit' : 'download')
+    } else if (event.key === 'F2' && selectedEntries.length === 1 && !selectedEntries[0].badName) {
+      event.preventDefault()
+      setRenamingPath(selectedEntries[0].path)
+    } else if (event.key === 'Delete' && selectedEntries.length) {
+      event.preventDefault()
+      if (selectedEntries.some((entry) => entry.badName)) message.warning(t('sftp.badNameWarning'))
+      else doDelete(selectedEntries)
+    } else if (event.key === 'Backspace' || (event.altKey && event.key === 'ArrowUp')) {
+      event.preventDefault()
+      const parent = parentOf(cwd)
+      if (parent !== cwd) void load(parent)
+    }
+  }
+
   const crumbs = useMemo(() => {
     const segs = displayDir.split('/').filter(Boolean)
     return [{ label: '/', path: '/' }, ...segs.map((s, i) => ({ label: s, path: `/${segs.slice(0, i + 1).join('/')}` }))]
   }, [displayDir])
+
+  useLayoutEffect(() => {
+    const area = tableAreaRef.current
+    if (!area) return
+    const header = area.querySelector<HTMLElement>('.ant-table-header')
+    // CSS zoom scales bounding rects, but client/offsetHeight remain CSS pixels.
+    const measure = (): void => setTableBodyHeight(Math.max(1, area.clientHeight - (header?.offsetHeight ?? 0)))
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(area)
+    if (header) observer.observe(header)
+    return () => observer.disconnect()
+  }, [tab.sessionId, tab.state, navPending, error])
 
   if (tab.state !== 'ready' && entries.length === 0) {
     return (
@@ -1151,11 +1278,26 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
       {/* 空白处右键也要出菜单（FinalShell 同款）：onRow 只覆盖到行上，
           表头、行下面的空白区、乃至"加载中/出错"这几个占位都落在这个容器上 */}
       <div
+        ref={tableAreaRef}
         className={styles.table}
+        role="grid"
+        aria-label={t('sftp.fileList')}
+        aria-multiselectable
+        aria-rowcount={visible.length + 1}
+        aria-activedescendant={focusedIndex >= 0 ? rowId(focusedIndex) : undefined}
+        tabIndex={0}
+        style={{ '--ofs-sftp-table-body-height': `${tableBodyHeight}px` } as CSSProperties}
+        onKeyDown={onFileListKeyDown}
+        onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest('.ant-table-row, .ant-table-header, .ant-table-thead, [class*="-scrollbar"], input, button, a')) return
+          focusList()
+          clearSelection()
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           // 目标为空的菜单要与"没有选中项"对得上，否则灰掉的条目会显得莫名其妙
-          setSelected([])
+          focusList()
+          clearSelection()
           setContextMenu({ x: e.clientX, y: e.clientY, entry: null })
         }}
       >
@@ -1177,9 +1319,10 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
           </div>
         ) : (
           <Table<SftpEntry>
+            ref={tableRef}
             size="small"
             virtual
-            scroll={{ y: 220, x: 620 }}
+            scroll={{ y: tableBodyHeight, x: 620 }}
             pagination={false}
             rowKey="path"
             columns={columns}
@@ -1188,15 +1331,33 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
             // 还留着、界面看起来"没反应"——加一个 150ms 延迟出现的转圈：本地/秒开的
             // 目录一闪都不闪，慢链路上则立刻确认"点到了、在读了"。首次加载（空表）同样受用
             loading={{ spinning: loading, delay: 150 }}
-            rowSelection={{
-              selectedRowKeys: selected,
-              onChange: (keys) => setSelected(keys as string[]),
-              columnWidth: 32
+            onChange={(_, __, sorter) => {
+              const next = Array.isArray(sorter) ? sorter[0] : sorter
+              const field = next.field
+              setSort(next.order && (field === 'name' || field === 'size' || field === 'mtime')
+                ? { field, order: next.order } : null)
             }}
-            rowClassName={(entry) => (dropTarget === entry.path ? styles.dropRow : '')}
-            onRow={(entry) => ({
-              onDoubleClick: () =>
-                openEntry(entry, settings.sftp.doubleClickAction === 'open' ? 'edit' : 'download'),
+            rowClassName={(entry) => [
+              selectedSet.has(entry.path) ? styles.selectedRow : '',
+              focusedPath === entry.path ? styles.focusedRow : '',
+              dropTarget === entry.path ? styles.dropRow : ''
+            ].filter(Boolean).join(' ')}
+            onRow={(entry, index) => ({
+              id: rowId(index ?? 0),
+              role: 'row',
+              'aria-rowindex': (index ?? 0) + 2,
+              'aria-selected': selectedSet.has(entry.path),
+              onClick: (event) => {
+                event.stopPropagation()
+                focusList()
+                selectEntry(entry, event.shiftKey, event.ctrlKey || event.metaKey)
+              },
+              onDoubleClick: (event) => {
+                if (event.target instanceof Element && event.target.closest('input, button, a')) return
+                if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                  openEntry(entry, settings.sftp.doubleClickAction === 'open' ? 'edit' : 'download')
+                }
+              },
               // 拖到目录行上 → 上传进那个目录（uploadPaths 的 targetDir 一直是预留好的）
               onDragOver: (e) => {
                 if (!isFileDrag(e) || !isDir(entry) || entry.badName) return
@@ -1218,7 +1379,9 @@ export function SftpPane({ tab, active }: Props): React.JSX.Element {
                 e.preventDefault()
                 // 必须拦住冒泡：否则容器上那个"空白处菜单"随后又把 entry 抹成 null
                 e.stopPropagation()
-                if (!selected.includes(entry.path)) setSelected([entry.path])
+                focusList()
+                if (!selectedSet.has(entry.path)) selectEntry(entry, false, false)
+                else focusEntry(entry)
                 setContextMenu({ x: e.clientX, y: e.clientY, entry })
               }
             })}

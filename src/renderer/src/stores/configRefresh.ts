@@ -14,7 +14,7 @@ export function wireConfigRefresh(): () => void {
     void Promise.allSettled([
       useConnectionStore.getState().load(), useSavedRefStore.getState().load(),
       useSnippetStore.getState().load(), useForwardStore.getState().load(),
-      ofs.invoke('settings:get').then((settings) => useSettingsStore.setState({ settings }))
+      ofs.invoke('settings:get').then(useSettingsStore.getState().receive)
     ]).finally(() => { busy = false })
   }
   const off = ofs.on('app:configChanged', refresh)

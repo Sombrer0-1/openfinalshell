@@ -22,7 +22,7 @@ const MAX_SIDE_PANEL_PCT = 32
 
 export function MainLayout({ uiMode }: Props): React.JSX.Element {
   const settings = useSettingsStore((s) => s.settings)
-  const patch = useSettingsStore((s) => s.patch)
+  const patchLayout = useSettingsStore((s) => s.patchLayout)
   const tabs = useSessionStore((s) => s.tabs)
   const activeTabId = useSessionStore((s) => s.activeTabId)
   // 停采集器现在收在 toggleMonitor 里（终端工具条那条路径绕不过去了）
@@ -44,18 +44,6 @@ export function MainLayout({ uiMode }: Props): React.JSX.Element {
         <div className={styles.panels}>
           <PanelGroup
             direction="horizontal"
-            onLayout={(sizes) => {
-              if (sizes.length < 2) return
-              const next = { ...layout }
-              if (!layout.sidePanelCollapsed) {
-                next.sidePanelSizePct = Math.min(
-                  MAX_SIDE_PANEL_PCT,
-                  Math.max(MIN_SIDE_PANEL_PCT, sizes[0])
-                )
-              }
-              if (activeTab?.monitorOpen) next.monitorPanelSizePct = sizes[sizes.length - 1]
-              patch({ layout: next })
-            }}
           >
             {!layout.sidePanelCollapsed && (
               <>
@@ -65,6 +53,7 @@ export function MainLayout({ uiMode }: Props): React.JSX.Element {
                   defaultSize={sidePanelSize}
                   minSize={MIN_SIDE_PANEL_PCT}
                   maxSize={MAX_SIDE_PANEL_PCT}
+                  onResize={(size) => patchLayout({ sidePanelSizePct: size })}
                 >
                   <SidePanel />
                 </Panel>
@@ -91,6 +80,7 @@ export function MainLayout({ uiMode }: Props): React.JSX.Element {
                   defaultSize={layout.monitorPanelSizePct}
                   minSize={14}
                   maxSize={40}
+                  onResize={(size) => patchLayout({ monitorPanelSizePct: size })}
                 >
                   <ErrorBoundary label="monitor">
                     <MonitorPanel tab={activeTab} onClose={() => toggleMonitor(activeTab.id)} />

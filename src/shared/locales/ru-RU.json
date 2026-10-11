@@ -147,6 +147,8 @@
     "reconnected": "Соединение восстановлено"
   },
   "monitor": {
+    "cpu": "CPU",
+    "cpuCores": "Ядра процессора",
     "title": "Мониторинг сервера",
     "system": "Система",
     "hostname": "Имя хоста",
@@ -196,6 +198,7 @@
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
   "sftp": {
+    "fileList": "Список файлов",
     "waitingSession": "Ожидание сеанса…",
     "back": "Назад",
     "forward": "Вперёд",
@@ -593,6 +596,7 @@
     "confirmOk": "Отключить и установить"
   },
   "settings": {
+    "saveFailed": "Не удалось сохранить настройки, или они были изменены в другом окне. Сохранённые настройки загружены заново.",
     "section_general": "Общие",
     "section_appearance": "Внешний вид",
     "section_terminal": "Терминал",

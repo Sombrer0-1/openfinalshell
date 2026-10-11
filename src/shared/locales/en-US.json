@@ -143,6 +143,8 @@
     "reconnected": "Connection restored"
   },
   "monitor": {
+    "cpu": "CPU",
+    "cpuCores": "CPU cores",
     "title": "Server monitor",
     "system": "System",
     "hostname": "Hostname",
@@ -192,6 +194,7 @@
     "noteCountersUnavailable": "Active TCP ports and connection counts visible to the current server user are shown. This server's ss does not provide complete bidirectional kernel byte counters, so receive and send rates cannot be calculated reliably."
   },
   "sftp": {
+    "fileList": "File list",
     "waitingSession": "Waiting for the session…",
     "back": "Back",
     "forward": "Forward",
@@ -589,6 +592,7 @@
     "confirmOk": "Disconnect and install"
   },
   "settings": {
+    "saveFailed": "Settings could not be saved or were changed in another window. Reloaded the saved settings.",
     "section_general": "General",
     "section_appearance": "Appearance",
     "section_terminal": "Terminal",

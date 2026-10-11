@@ -147,6 +147,8 @@
     "reconnected": "接続が復旧しました"
   },
   "monitor": {
+    "cpu": "CPU",
+    "cpuCores": "CPU コア使用率",
     "title": "サーバー監視",
     "system": "システム",
     "hostname": "ホスト名",
@@ -196,6 +198,7 @@
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
   "sftp": {
+    "fileList": "ファイル一覧",
     "waitingSession": "セッションを待機中…",
     "back": "戻る",
     "forward": "進む",
@@ -593,6 +596,7 @@
     "confirmOk": "切断してインストール"
   },
   "settings": {
+    "saveFailed": "設定を保存できなかったか、別のウィンドウで変更されました。保存済みの設定を再読み込みしました。",
     "section_general": "一般",
     "section_appearance": "外観",
     "section_terminal": "ターミナル",

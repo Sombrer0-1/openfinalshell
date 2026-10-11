@@ -147,6 +147,8 @@
     "reconnected": "Conexión restablecida"
   },
   "monitor": {
+    "cpu": "CPU",
+    "cpuCores": "Núcleos de CPU",
     "title": "Monitor de servidor",
     "system": "Sistema",
     "hostname": "Nombre de host",
@@ -196,6 +198,7 @@
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
   "sftp": {
+    "fileList": "Lista de archivos",
     "waitingSession": "Esperando a la sesión…",
     "back": "Atrás",
     "forward": "Adelante",
@@ -593,6 +596,7 @@
     "confirmOk": "Desconectar e instalar"
   },
   "settings": {
+    "saveFailed": "No se pudieron guardar los ajustes o se modificaron en otra ventana. Se han recargado los ajustes guardados.",
     "section_general": "General",
     "section_appearance": "Apariencia",
     "section_terminal": "Terminal",

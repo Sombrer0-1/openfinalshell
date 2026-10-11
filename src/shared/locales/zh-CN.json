@@ -143,6 +143,8 @@
     "reconnected": "连接已恢复"
   },
   "monitor": {
+    "cpu": "CPU",
+    "cpuCores": "CPU 分核占用",
     "title": "服务器监控",
     "system": "系统信息",
     "hostname": "主机名",
@@ -192,6 +194,7 @@
     "noteCountersUnavailable": "已显示当前用户可见的活动 TCP 端口和连接数；此服务器的 ss 未提供完整双向内核字节计数，无法可靠计算上下行速率。"
   },
   "sftp": {
+    "fileList": "文件列表",
     "waitingSession": "等待会话就绪…",
     "back": "后退",
     "forward": "前进",
@@ -589,6 +592,7 @@
     "confirmOk": "断开并安装"
   },
   "settings": {
+    "saveFailed": "设置保存失败或已被其他窗口修改，已重新加载。",
     "section_general": "常规",
     "section_appearance": "外观",
     "section_terminal": "终端",
