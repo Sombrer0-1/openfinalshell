@@ -68,6 +68,7 @@
     <string name="sftp_connect_body">Conéctese a un servidor para explorar archivos.</string>
     <string name="sftp_empty_title">El directorio está vacío</string>
     <string name="sftp_empty_body">No hay elementos que mostrar aquí.</string>
+    <string name="sftp_directory_entry">Directorio %1$s</string>
     <string name="terminal_no_session">Sin sesión</string>
     <string name="terminal_select_body">Seleccione una conexión guardada y conéctese primero.</string>
     <string name="terminal_connecting">Conectando a %1$s...</string>

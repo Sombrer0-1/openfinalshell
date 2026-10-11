@@ -70,6 +70,7 @@
     <string name="sftp_connect_body">Подключитесь к серверу, чтобы просматривать файлы.</string>
     <string name="sftp_empty_title">Каталог пуст</string>
     <string name="sftp_empty_body">Здесь нет элементов для отображения.</string>
+    <string name="sftp_directory_entry">Каталог %1$s</string>
     <string name="terminal_no_session">Нет сеанса</string>
     <string name="terminal_select_body">Сначала выберите сохранённое подключение и подключитесь.</string>
     <string name="terminal_connecting">Подключение к %1$s...</string>

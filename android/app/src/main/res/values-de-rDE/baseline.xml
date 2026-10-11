@@ -68,6 +68,7 @@
     <string name="sftp_connect_body">Verbinden Sie sich mit einem Server, um Dateien zu durchsuchen.</string>
     <string name="sftp_empty_title">Verzeichnis ist leer</string>
     <string name="sftp_empty_body">Hier sind keine Einträge vorhanden.</string>
+    <string name="sftp_directory_entry">Verzeichnis %1$s</string>
     <string name="terminal_no_session">Keine Sitzung</string>
     <string name="terminal_select_body">Wählen Sie zuerst eine gespeicherte Verbindung und stellen Sie die Verbindung her.</string>
     <string name="terminal_connecting">Verbindung mit %1$s wird hergestellt...</string>

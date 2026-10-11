@@ -71,6 +71,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -908,6 +909,10 @@ private fun SftpScreen(state: AndroidUiState, viewModel: MainViewModel, settings
     var transferAction by rememberSaveable { mutableStateOf("upload") }
     var showDirectoryForm by rememberSaveable { mutableStateOf(false) }
     var showRenameForm by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = showDirectoryForm || showRenameForm) {
+        showDirectoryForm = false
+        showRenameForm = false
+    }
 
     pendingDeletePath?.let { targetPath ->
         AlertDialog(
@@ -1060,7 +1065,11 @@ private fun SftpEntryRow(
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(start = OpenFinalShellSpacing.Medium, top = OpenFinalShellSpacing.Small, bottom = OpenFinalShellSpacing.Small, end = OpenFinalShellSpacing.Small), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(if (directory) "[DIR] ${entry.name}" else entry.name, fontFamily = if (directory) FontFamily.Default else FontFamily.Monospace, maxLines = 2)
+                Text(
+                    if (directory) androidx.compose.ui.res.stringResource(R.string.sftp_directory_entry, entry.name) else entry.name,
+                    fontFamily = if (directory) FontFamily.Default else FontFamily.Monospace,
+                    maxLines = 2
+                )
                 Text(entry.path, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
             io.github.openfinalshell.android.transfer.SftpDownloadButton(entry.path, viewModel, onDownloadDirectory)

@@ -69,6 +69,7 @@
     <string name="sftp_connect_body">サーバーに接続するとファイルを参照できます。</string>
     <string name="sftp_empty_title">ディレクトリは空です</string>
     <string name="sftp_empty_body">表示する項目はありません。</string>
+    <string name="sftp_directory_entry">ディレクトリ %1$s</string>
     <string name="terminal_no_session">セッションなし</string>
     <string name="terminal_select_body">まず保存済みの接続を選択して接続してください。</string>
     <string name="terminal_connecting">%1$s に接続中...</string>

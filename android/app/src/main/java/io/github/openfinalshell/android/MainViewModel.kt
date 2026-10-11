@@ -32,6 +32,7 @@ import io.github.openfinalshell.android.core.ssh.SftpEntry
 import io.github.openfinalshell.android.core.ssh.SshSessionManager
 import io.github.openfinalshell.android.core.terminal.TerminalSnapshot
 import io.github.openfinalshell.android.core.sftp.TransferQueue
+import io.github.openfinalshell.android.core.sftp.orderedSftpEntries
 import io.github.openfinalshell.android.core.sftp.TransferSink
 import io.github.openfinalshell.android.core.sftp.TransferSource
 import io.github.openfinalshell.android.core.sftp.TransferTask
@@ -824,7 +825,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             var channel: io.github.openfinalshell.android.core.ssh.SftpChannel? = null
             try {
                 channel = sessions.openSftp(sessionId)
-                val entries = channel.list(path).filterNot { it.name == "." || it.name == ".." || (!transferSettings.sftpShowHiddenFiles && it.name.startsWith('.')) }
+                val entries = orderedSftpEntries(
+                    channel.list(path).filterNot { it.name == "." || it.name == ".." || (!transferSettings.sftpShowHiddenFiles && it.name.startsWith('.')) }
+                )
                 updateState { it.copy(sftpPath = path, sftpEntries = entries, status = UiStatus(StatusKey.SFTP_READY)) }
             } catch (error: Throwable) {
                 setStatus(readableError(error, StatusKey.SFTP_BROWSE_FAILED))
