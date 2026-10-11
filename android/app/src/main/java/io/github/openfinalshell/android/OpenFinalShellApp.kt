@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -1873,7 +1874,11 @@ private fun ChoiceRow(label: String, selected: String, options: List<Pair<String
 
 @Composable
 private fun NumberSetting(label: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
+    var focused by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf(value.toString()) }
+    LaunchedEffect(value, focused) {
+        if (!focused) text = value.toString()
+    }
     OutlinedTextField(
         value = text,
         onValueChange = { next ->
@@ -1881,7 +1886,7 @@ private fun NumberSetting(label: String, value: Int, range: IntRange, onChange: 
             text = filtered
             filtered.toIntOrNull()?.takeIf { it in range }?.let(onChange)
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
         label = { Text(label) },
         supportingText = { Text(range.first.toString() + " - " + range.last.toString()) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
