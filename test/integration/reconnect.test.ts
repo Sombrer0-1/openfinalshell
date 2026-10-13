@@ -109,6 +109,7 @@ describe('断线自动重连', () => {
 
     const { sessionId } = await sshManager.open(profile.id)
     const { termId } = await sshManager.openShell(sessionId, 80, 24)
+    sshManager.getTerm(termId)!.ready()
     await waitFor(() => eventsOf('term:data').some((e) => e.termId === termId), 10000, 'first output')
 
     // 杀掉服务器 → 触发掉线；随后重新起服务器让重连成功
@@ -152,6 +153,7 @@ describe('断线自动重连', () => {
     )
     const { sessionId } = await sshManager.open(profile.id)
     const { termId } = await sshManager.openShell(sessionId, 80, 24)
+    sshManager.getTerm(termId)!.ready()
     await waitFor(() => eventsOf('term:data').some((e) => e.termId === termId), 10000, 'output')
 
     server.kill()
@@ -171,6 +173,7 @@ describe('断线自动重连', () => {
 
     const { sessionId } = await sshManager.open(profile.id)
     const { termId } = await sshManager.openShell(sessionId, 80, 24)
+    sshManager.getTerm(termId)!.ready()
     await waitFor(() => eventsOf('term:data').some((e) => e.termId === termId), 10000, 'output')
 
     const before = states().length

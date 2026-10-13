@@ -12,6 +12,7 @@ import { useSessionStore, type SessionTab } from '@/stores/useSessionStore'
 import { useUiStore } from '@/stores/useUiStore'
 import { useConnectionStore } from '@/stores/useConnectionStore'
 import { TitlebarSafeTooltip } from '@/components/TitlebarSafeTooltip'
+import { bracketedUserPaste, plainUserPaste } from './bracketedUserPaste'
 import { captureSubmitted, type PromptSnapshot } from './commandCapture'
 import { emitShellCommand } from './commandEvents'
 import { createTerminal, type TerminalBundle } from './createTerminal'
@@ -19,6 +20,8 @@ import { noteProgrammaticWrite, registerTerm, trackerFor, unregisterTerm } from 
 import { HistoryOverlay } from './HistoryOverlay'
 import { SearchOverlay } from './SearchOverlay'
 import { resolveTerminalTheme } from '@/themes/terminal'
+import { attachRemoteWheel } from './remoteWheel'
+import { attachMouseCoordinates } from './mouseCoordinates'
 import styles from './TerminalPane.module.css'
 
 function isMacPlatform(): boolean {
@@ -76,6 +79,9 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
   const [searchOpen, setSearchOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
+  const allowLocalMenuRef = useRef(true)
+  const activeRef = useRef(active)
+  activeRef.current = active
 
   const syncPtySize = useCallback((): void => {
     const term = bundleRef.current?.term
@@ -133,22 +139,48 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     [setFontSize]
   )
 
-  const pasteFromClipboard = useCallback(async (): Promise<void> => {
-    const text = await navigator.clipboard.readText().catch(() => '')
+  const pasteText = useCallback((text: string): void => {
     if (!text || !termIdRef.current) return
-    const doPaste = (): void => writeToTerm(text)
-    if (settings.terminal.confirmMultilinePaste && text.includes('\n')) {
+    // 远端已要求整段粘贴时包进标记，换行不再逐行执行。
+    // 没要求时仍逐行发送，但一行只发一个回车：剪贴板里的 \r\n 不能变成两次。
+    const bracketed = bundleRef.current?.term.modes.bracketedPasteMode === true
+    const payload = bracketed ? bracketedUserPaste(text) : plainUserPaste(text)
+    if (!payload) return
+    const target = termIdRef.current
+    const focusTarget = (): void => {
+      if (activeRef.current && termIdRef.current === target) bundleRef.current?.term.focus()
+    }
+    const doPaste = (): void => {
+      if (termIdRef.current !== target) return
+      writeToTerm(payload)
+      focusTarget()
+      // Let the menu's close/focus handling settle before restoring the caret.
+      requestAnimationFrame(focusTarget)
+    }
+    if (!bracketed && useSettingsStore.getState().settings?.terminal.confirmMultilinePaste && /[\r\n]/.test(text)) {
       modal.confirm({
         title: t('terminal.multilinePasteTitle'),
         content: t('terminal.multilinePasteContent', { lines: text.split('\n').length }),
         okText: t('common.ok'),
         cancelText: t('common.cancel'),
-        onOk: doPaste
+        onOk: doPaste,
+        afterClose: focusTarget
       })
     } else {
       doPaste()
     }
-  }, [modal, settings.terminal.confirmMultilinePaste, t, writeToTerm])
+  }, [modal, t, writeToTerm])
+
+  const pasteFromClipboard = useCallback(async (): Promise<void> => {
+    const target = termIdRef.current
+    if (!target) return
+    const text = await navigator.clipboard.readText().catch(() => '')
+    if (termIdRef.current === target) pasteText(text)
+  }, [pasteText])
+  const pasteTextRef = useRef(pasteText)
+  const pasteClipboardRef = useRef(pasteFromClipboard)
+  pasteTextRef.current = pasteText
+  pasteClipboardRef.current = pasteFromClipboard
 
   // ---- 创建 xterm 实例（tab 存续期间常驻，重连不重建） ----
   useEffect(() => {
@@ -157,47 +189,82 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     const bundle = createTerminal(settings, uiMode)
     bundleRef.current = bundle
     bundle.term.open(el)
+    const mouseCoordinates = attachMouseCoordinates(bundle.term)
     bundle.term.onResize(syncPtySize)
+
+    // Keyboard and IME edits affect prompt tracking; terminal protocol replies do not.
+    const noteEditing = (): void => {
+      const termId = termIdRef.current
+      if (termId) trackerFor(termId).noteKeystroke(bundle.term.buffer.active)
+    }
+    bundle.term.onKey(noteEditing)
+    el.addEventListener('compositionstart', noteEditing, true)
+    el.addEventListener('beforeinput', noteEditing, true)
 
     bundle.term.onData((data) => {
       const termId = termIdRef.current
       if (!termId) return
-      /*
-       * 命令历史采集的第一半：这一行第一次有输入时，光标正停在提示符末尾。
-       * 挂在 onData 而不是键盘事件上，是为了把输入法上屏也算进来 ——
-       * 中文候选是经 onData 提交的，没有对应的 keydown。
-       */
-      trackerFor(termId).noteKeystroke(bundle.term.buffer.active)
       ofs.send('term:input', { termId, data })
     })
 
-    if (settings.terminal.copyOnSelect) {
-      bundle.term.onSelectionChange(() => {
+    bundle.term.onBinary((data) => {
+      const termId = termIdRef.current
+      if (termId) ofs.send('term:binary', { termId, data: Uint8Array.from(data, char => char.charCodeAt(0)) })
+    })
+
+    bundle.term.onSelectionChange(() => {
+      if (useSettingsStore.getState().settings?.terminal.copyOnSelect) {
         const sel = bundle.term.getSelection()
         if (sel) void navigator.clipboard.writeText(sel).catch(() => {})
-      })
+      }
+    })
+
+    const onPaste = (event: ClipboardEvent): void => {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (event.clipboardData) pasteTextRef.current(event.clipboardData.getData('text/plain'))
+      else void pasteClipboardRef.current()
     }
+    el.addEventListener('paste', onPaste, true)
+    const remoteWheel = attachRemoteWheel(el, bundle.term)
 
     // 组词中（IME）一律放行，避免候选上屏时误触快捷键
+    const localKeys = new Set<string>()
+    const consumeLocalKey = (event: KeyboardEvent): false => {
+      event.preventDefault()
+      localKeys.add(event.code)
+      return false
+    }
     bundle.term.attachCustomKeyEventHandler((ev) => {
+      // Enhanced keyboard modes report releases too. A local shortcut must not
+      // leak an orphan key release into the remote CLI.
+      if (ev.type === 'keyup' && localKeys.delete(ev.code)) {
+        ev.preventDefault()
+        return false
+      }
       if (ev.isComposing || ev.keyCode === 229) return true
       if (ev.type !== 'keydown') return true
       if (hasPrimaryModifier(ev) && ev.shiftKey && ev.code === 'KeyC') {
         const sel = bundle.term.getSelection()
-        if (sel) void navigator.clipboard.writeText(sel).catch(() => {})
-        return false
+        if (sel) {
+          void navigator.clipboard.writeText(sel).catch(() => {})
+          return consumeLocalKey(ev)
+        }
+        return true
       }
       if (hasPrimaryModifier(ev) && ev.shiftKey && ev.code === 'KeyV') {
-        void pasteFromClipboard()
-        return false
+        // return false 只阻止 xterm 处理按键；还要取消浏览器默认粘贴，
+        // 否则随后触发的 paste 事件会经 xterm.onData 再发送同一份内容。
+        void pasteClipboardRef.current()
+        return consumeLocalKey(ev)
       }
       if (hasPrimaryModifier(ev) && !ev.shiftKey && ev.code === 'KeyF') {
         setSearchOpen(true)
-        return false
+        return consumeLocalKey(ev)
       }
       if (hasPrimaryModifier(ev) && ev.shiftKey && ev.code === 'KeyH') {
         setHistoryOpen(true)
-        return false
+        return consumeLocalKey(ev)
       }
       /*
        * Ctrl/Cmd+= / Ctrl/Cmd+- / Ctrl/Cmd+0 调字号（与 Ctrl/Cmd+滚轮同一条通路）。
@@ -208,17 +275,17 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
       if (hasPrimaryModifier(ev) && !ev.altKey && (isMacPlatform() ? !ev.ctrlKey : !ev.metaKey)) {
         if (ev.key === '=' || ev.key === '+') {
           adjustFontSize(1)
-          return false
+          return consumeLocalKey(ev)
         }
         if (ev.key === '-' && !ev.shiftKey) {
           adjustFontSize(-1)
-          return false
+          return consumeLocalKey(ev)
         }
         // '0' 不排 shift：法语 AZERTY 等布局的数字本来就要按 Shift 才打得出，
         // 而美式布局 Ctrl+Shift+0 产生的 key 是 ')'，根本到不了这个分支 —— 排了纯属误伤
         if (ev.key === '0') {
           setFontSize(DEFAULT_SETTINGS.terminal.fontSize)
-          return false
+          return consumeLocalKey(ev)
         }
       }
       /*
@@ -310,6 +377,11 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     observer.observe(el)
 
     return () => {
+      remoteWheel.dispose()
+      mouseCoordinates.dispose()
+      el.removeEventListener('paste', onPaste, true)
+      el.removeEventListener('compositionstart', noteEditing, true)
+      el.removeEventListener('beforeinput', noteEditing, true)
       el.removeEventListener('wheel', onWheel, { capture: true })
       observer.disconnect()
       if (timer) clearTimeout(timer)
@@ -335,6 +407,13 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
 
   const onContextMenu = useCallback(
     (e: React.MouseEvent): void => {
+      const remoteOwnsMouse = bundleRef.current?.term.modes.mouseTrackingMode !== 'none' && !!bundleRef.current && !e.shiftKey
+      allowLocalMenuRef.current = !remoteOwnsMouse
+      if (remoteOwnsMouse) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
       if (settings.terminal.rightClick === 'paste') {
         e.preventDefault()
         void pasteFromClipboard()
@@ -352,7 +431,11 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     const { cols, rows } = bundle.term
     void ofs
       .invoke('term:open', { sessionId: tab.sessionId, cols, rows })
-      .then(({ termId }) => {
+      .then(async ({ termId }) => {
+        if (bundleRef.current !== bundle) {
+          await ofs.invoke('term:close', termId)
+          return
+        }
         termIdRef.current = termId
         ptySizeRef.current = { cols, rows }
         registerTerm(termId, bundle.term)
@@ -362,7 +445,8 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         if (tab.shellEpoch > 0) {
           bundle.term.write(`\r\n\x1b[2m—— ${i18n.t('terminal.reconnected')} ——\x1b[0m\r\n`)
         }
-        if (active) bundle.term.focus()
+        await ofs.invoke('term:ready', termId)
+        if (active && bundleRef.current === bundle) bundle.term.focus()
       })
       .catch((err: Error) => {
         updateTab(tab.id, { state: 'closed', error: err.message })
@@ -387,13 +471,14 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     const bundle = bundleRef.current
     if (!bundle) return
     if (active) {
-      bundle.attachWebgl()
+      if (settings.terminal.webgl) bundle.attachWebgl()
+      else bundle.detachWebgl()
       sendResize()
       bundle.term.focus()
     } else {
       bundle.detachWebgl()
     }
-  }, [active, sendResize])
+  }, [active, settings.terminal.webgl, sendResize])
 
   // ---- 主题热更新 ----
   useEffect(() => {
@@ -588,13 +673,11 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     </div>
   )
 
-  if (menuItems.length === 0) return paneBody
-
   return (
     <Dropdown
-      trigger={['contextMenu']}
-      open={contextMenuOpen}
-      onOpenChange={setContextMenuOpen}
+      trigger={menuItems.length > 0 ? ['contextMenu'] : []}
+      open={menuItems.length > 0 && contextMenuOpen}
+      onOpenChange={(open) => setContextMenuOpen(open && allowLocalMenuRef.current)}
       menu={{ items: menuItems, onClick: ({ key }) => onMenuClick(key) }}
     >
       {paneBody}

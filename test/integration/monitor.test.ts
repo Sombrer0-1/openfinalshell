@@ -205,6 +205,7 @@ describe('监控采集', () => {
     await monitorManager.start(sessionId, 1000)
     const { termId } = await sshManager.openShell(sessionId, 80, 24)
     const shell = sshManager.getTerm(termId)!
+    shell.ready()
     shell.write('echo monitor-coexist\r')
     await waitFor(
       () =>

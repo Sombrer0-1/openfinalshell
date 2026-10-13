@@ -209,6 +209,8 @@ export interface InvokeMap {
 
   // --- 终端 ---
   'term:open': { args: [{ sessionId: SessionId; cols: number; rows: number }]; result: { termId: TermId } }
+  /** Renderer has registered this terminal and can consume startup output. */
+  'term:ready': { args: [TermId]; result: void }
   'term:resize': { args: [{ termId: TermId; cols: number; rows: number }]; result: void }
   'term:close': { args: [TermId]; result: void }
   /** 快捷命令：写入命令文本（autoEnter 时附 \n） */
@@ -414,6 +416,8 @@ export interface InvokeMap {
 export interface SendMap {
   /** 键盘输入（含粘贴） */
   'term:input': { termId: TermId; data: string }
+  /** Raw terminal protocol bytes, without text charset conversion. */
+  'term:binary': { termId: TermId; data: Uint8Array }
   /** 终端下行背压确认：renderer 已消费 bytes 字节（见计划 4.2） */
   'term:flow-ack': { termId: TermId; bytes: number }
   /** RDP 高频键鼠输入；不等待主进程 Promise 返回，降低每次操作的 IPC 延迟。 */
@@ -589,6 +593,7 @@ export const INVOKE_CHANNELS = channelSet<InvokeChannel>({
   'rdp:clipboardRemoteFilesDownload': true,
   'rdp:systemFallback': true,
   'term:open': true,
+  'term:ready': true,
   'term:resize': true,
   'term:close': true,
   'term:exec': true,
@@ -647,6 +652,7 @@ export const INVOKE_CHANNELS = channelSet<InvokeChannel>({
 
 export const SEND_CHANNELS = channelSet<SendChannel>({
   'term:input': true,
+  'term:binary': true,
   'term:flow-ack': true,
   'rdp:input': true
 })

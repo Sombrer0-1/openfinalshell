@@ -21,6 +21,7 @@ export class ShellSession {
   private bytesInFlight = 0
   private paused = false
   private closed = false
+  private outputReady = false
   private readonly decoder: { write(buf: Buffer): string; end(): string | undefined } | null
 
   constructor(
@@ -49,6 +50,13 @@ export class ShellSession {
   private enqueue(chunk: Buffer): void {
     this.pending.push(chunk)
     this.pendingBytes += chunk.length
+    if (!this.outputReady) {
+      if (!this.paused && this.pendingBytes > TERM_FLOW_PAUSE_BYTES) {
+        this.paused = true
+        this.channel.pause()
+      }
+      return
+    }
     if (this.pendingBytes >= TERM_FLUSH_MAX_BYTES) {
       this.flushNow()
     } else if (!this.flushTimer) {
@@ -61,7 +69,7 @@ export class ShellSession {
       clearTimeout(this.flushTimer)
       this.flushTimer = null
     }
-    if (this.pendingBytes === 0) return
+    if (!this.outputReady || this.pendingBytes === 0) return
     let payload = this.pending.length === 1 ? this.pending[0] : Buffer.concat(this.pending)
     this.pending = []
     this.pendingBytes = 0
@@ -92,6 +100,13 @@ export class ShellSession {
     }
   }
 
+  /** Release startup output only after renderer registration, preserving byte order. */
+  ready(): void {
+    if (this.closed || this.outputReady) return
+    this.outputReady = true
+    this.flushNow()
+  }
+
   // ---------- 上行 ----------
   write(data: string): void {
     if (this.closed) return
@@ -102,6 +117,10 @@ export class ShellSession {
     }
   }
 
+  writeBinary(data: Uint8Array): void {
+    if (!this.closed) this.channel.write(Buffer.from(data))
+  }
+
   resize(cols: number, rows: number): void {
     if (this.closed) return
     this.channel.setWindow(rows, cols, 0, 0)
@@ -110,6 +129,10 @@ export class ShellSession {
   close(): void {
     if (this.closed) return
     this.closed = true
+    if (this.flushTimer) clearTimeout(this.flushTimer)
+    this.flushTimer = null
+    this.pending = []
+    this.pendingBytes = 0
     this.channel.close()
   }
 }

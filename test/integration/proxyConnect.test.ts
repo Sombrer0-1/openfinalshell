@@ -288,6 +288,7 @@ async function openVia(proxy: ProxySpec): Promise<string> {
 async function echoThroughShell(sessionId: string, text: string): Promise<string> {
   const conn = sshManager.get(sessionId)
   const shell = await conn.openShell(80, 24)
+  shell.ready()
   let out = ''
   const collect = setInterval(() => {
     for (const e of eventsOf('term:data')) {

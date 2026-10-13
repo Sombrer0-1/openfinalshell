@@ -141,8 +141,10 @@ describe('采集：三道守卫都在 commandCapture 里，面板不另写一份
     expect(DEFAULT_SETTINGS.terminal.saveCommandHistory).toBe(true)
   })
 
-  it('输入（含输入法上屏）经 onData 记提示符列', () => {
-    expect(flat(blockAfter(pane, 'bundle.term.onData('))).toContain('noteKeystroke(')
+  it('键盘与输入法编辑记提示符列，协议回复不被当作用户按键', () => {
+    expect(flat(blockAfter(pane, 'bundle.term.onData('))).not.toContain('noteKeystroke(')
+    expect(pane).toContain('bundle.term.onKey(noteEditing)')
+    expect(pane).toContain("el.addEventListener('compositionstart', noteEditing, true)")
   })
 })
 
@@ -150,9 +152,8 @@ describe('程序往终端里写字的三处都标记了那一行', () => {
   it('终端面板的粘贴/回填走同一个 writeToTerm，里面标记', () => {
     const pane = stripComments(read(PANE))
     expect(flat(blockAfter(pane, 'const writeToTerm ='))).toContain('noteProgrammaticWrite(termId)')
-    // 粘贴不许绕过它自己发 term:input（doPaste 是个无花括号的箭头函数，按行取）
-    const doPaste = pane.slice(pane.indexOf('const doPaste ='))
-    expect(doPaste.slice(0, doPaste.indexOf('\n'))).toContain('writeToTerm(text)')
+    // 粘贴经同一写入入口，保持提示符跟踪一致。
+    expect(flat(blockAfter(pane, 'const doPaste ='))).toContain('writeToTerm(payload)')
     // 面板里发 term:input 的地方只有 writeToTerm 与 onData 两处，粘贴/回填不许再开第三处
     expect(pane.match(/ofs\.send\('term:input'/g) ?? []).toHaveLength(2)
   })

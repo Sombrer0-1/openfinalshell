@@ -1,13 +1,14 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
-import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { UnicodeGraphemesAddon } from '@xterm/addon-unicode-graphemes'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import type { AppSettings } from '@shared/types'
 import { resolveTerminalTheme } from '@/themes/terminal'
 import { ofs } from '@/ipc/api'
+import { attachRemoteClipboard } from './remoteClipboard'
 
 export interface TerminalBundle {
   term: Terminal
@@ -32,16 +33,16 @@ export function createTerminal(settings: AppSettings, uiMode: 'dark' | 'light'):
     theme: resolveTerminalTheme(t.themeId, uiMode),
     // macOS Option is handled by xterm as a Meta modifier, matching native
     // terminal word-navigation and the app's Option-based tab shortcuts.
-    macOptionIsMeta: true
+    macOptionIsMeta: true,
+    vtExtensions: { kittyKeyboard: true }
   })
 
   const fit = new FitAddon()
   const search = new SearchAddon()
-  const unicode11 = new Unicode11Addon()
   term.loadAddon(fit)
   term.loadAddon(search)
-  term.loadAddon(unicode11)
-  term.unicode.activeVersion = '11'
+  term.loadAddon(new UnicodeGraphemesAddon())
+  const clipboard = attachRemoteClipboard(term)
   // 终端里的链接是不可信内容：自定义 handler → main 协议白名单 → shell.openExternal
   term.loadAddon(
     new WebLinksAddon((event, uri) => {
@@ -52,7 +53,7 @@ export function createTerminal(settings: AppSettings, uiMode: 'dark' | 'light'):
 
   let webgl: WebglAddon | null = null
   const attachWebgl = (): void => {
-    if (webgl || !t.webgl) return
+    if (webgl) return
     try {
       const addon = new WebglAddon()
       addon.onContextLoss(() => {
@@ -78,6 +79,7 @@ export function createTerminal(settings: AppSettings, uiMode: 'dark' | 'light'):
     detachWebgl,
     dispose: () => {
       detachWebgl()
+      clipboard.dispose()
       term.dispose()
     }
   }

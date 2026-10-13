@@ -118,6 +118,8 @@ try {
   const [sessionA, sessionB] = await Promise.all([a.invoke('session:open', profileA.id), b.invoke('session:open', profileB.id)])
   const termA = await a.invoke('term:open', { sessionId: sessionA.sessionId, cols: 80, rows: 24 })
   const termB = await b.invoke('term:open', { sessionId: sessionB.sessionId, cols: 80, rows: 24 })
+  await a.invoke('term:ready', termA.termId)
+  await b.invoke('term:ready', termB.termId)
   await a.invoke('term:exec', { termId: termA.termId, command: 'echo isolated-a\r' })
   await b.invoke('term:exec', { termId: termB.termId, command: 'echo isolated-b\r' })
   await until(() => a.evaluate(`return window.__events.some(e=>e.channel==='term:data'&&new TextDecoder().decode(new Uint8Array(e.payload.data)).includes('isolated-a'))`))

@@ -37,6 +37,7 @@ it('20 UI switches preserve live shells, buffer contents and the single data sub
   useSessionStore.setState({ tabs, activeTabId: 'a' })
   fakeOfs.handle('term:open', (arg) => ({ termId: `term-${(arg as { sessionId: string }).sessionId}` }))
   fakeOfs.handle('term:close', () => undefined)
+  fakeOfs.handle('term:ready', () => undefined)
   fakeOfs.handle('term:resize', () => undefined)
   wireTermData()
   const initialListeners = fakeOfs.listenerCount()

@@ -14,6 +14,8 @@ export function registerTermIpc(): void {
     z.tuple([sizeSchema.extend({ sessionId: z.string() })])
   )
 
+  handle('term:ready', (termId) => sshManager.getTerm(termId)?.ready(), z.tuple([z.string()]))
+
   handle(
     'term:resize',
     ({ termId, cols, rows }) => {
@@ -37,6 +39,10 @@ export function registerTermIpc(): void {
   // 高频热路径：不走 zod
   onSend('term:input', ({ termId, data }) => {
     sshManager.getTerm(termId)?.write(data)
+  })
+  onSend('term:binary', ({ termId, data }) => {
+    if (!(data instanceof Uint8Array)) return
+    sshManager.getTerm(termId)?.writeBinary(data)
   })
   onSend('term:flow-ack', ({ termId, bytes }) => {
     sshManager.getTerm(termId)?.ack(bytes)

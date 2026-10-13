@@ -118,7 +118,11 @@ async function mountPane(): Promise<Rig> {
   return {
     term,
     echo: (data) => act(() => new Promise<void>((r) => term.write(data, r))),
-    type: (data) => act(() => term.input(data, true)),
+    type: (data) => act(() => {
+      const core = (term as unknown as { _core: { _onKey: { fire(event: unknown): void } } })._core
+      core._onKey.fire({ key: data, domEvent: new KeyboardEvent('keydown', { key: data }) })
+      term.input(data, true)
+    }),
     pressEnter: () =>
       act(() => {
         for (const h of keyHandlers) h(enterKey())
@@ -131,6 +135,7 @@ beforeEach(() => {
   fakeOfs.reset()
   fakeOfs.handle('term:open', () => ({ termId: `term-${Math.random().toString(36).slice(2)}` }))
   fakeOfs.handle('term:close', () => undefined)
+  fakeOfs.handle('term:ready', () => undefined)
   fakeOfs.handle('history:push', () => undefined)
   useSettingsStore.setState({ settings: structuredClone(DEFAULT_SETTINGS) })
   useHistoryStore.setState({ entries: [], loaded: false })

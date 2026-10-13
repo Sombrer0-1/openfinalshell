@@ -43,7 +43,8 @@
 .tabStrip {
   min-width: 0;
   -webkit-app-region: no-drag;
-  flex: 1;
+  /* 标签少时只占内容宽度，余下空白留给窗口拖动。 */
+  flex: 0 1 auto;
   display: flex;
   align-items: flex-end;
   gap: 2px;
@@ -54,6 +55,13 @@
 }
 .tabStrip::-webkit-scrollbar {
   display: none;
+}
+
+.dragSpace {
+  /* 标签溢出时也保留握持区域；它必须在 no-drag 滚动容器之外。 */
+  flex: 1 0 40px;
+  align-self: stretch;
+  -webkit-app-region: drag;
 }
 
 .tab {

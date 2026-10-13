@@ -683,6 +683,7 @@ export function createMockOfs(): OfsApi {
       return { termId }
     },
     'term:resize': () => undefined,
+    'term:ready': () => undefined,
     'term:close': (termId: never) => {
       terms.delete(termId as unknown as string)
     },

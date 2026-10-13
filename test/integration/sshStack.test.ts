@@ -132,6 +132,7 @@ describe('SSH 会话 + 终端数据通路', () => {
 
     const { termId } = await sshManager.openShell(sessionId, 100, 30)
     const shell = sshManager.getTerm(termId)!
+    shell.ready()
     expect(shell).toBeTruthy()
 
     const decode = (): string =>
@@ -161,6 +162,7 @@ describe('SSH 会话 + 终端数据通路', () => {
     const { sessionId } = await sshManager.open(profile.id) // hostkey 已信任，无 prompt
     const { termId } = await sshManager.openShell(sessionId, 80, 24)
     const shell = sshManager.getTerm(termId)!
+    shell.ready()
 
     let received = 0
     let sawDone = false

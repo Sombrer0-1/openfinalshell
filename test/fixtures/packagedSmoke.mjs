@@ -280,6 +280,7 @@ async function main() {
   const term = await evaluate(`
     const { termId } = await window.ofs.invoke('term:open', { sessionId: '${session.sessionId}', cols: 100, rows: 30 })
     window.__smokeTermId = termId
+    await window.ofs.invoke('term:ready', termId)
     await new Promise(r => setTimeout(r, 800))
     window.ofs.send('term:input', { termId, data: 'echo 打包冒烟-🚀\\r' })
     await new Promise(r => setTimeout(r, 1200))

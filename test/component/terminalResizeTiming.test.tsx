@@ -58,6 +58,7 @@ beforeEach(() => {
   fakeOfs.handle('term:open', () => opening.promise)
   fakeOfs.handle('term:resize', () => undefined)
   fakeOfs.handle('term:close', () => undefined)
+  fakeOfs.handle('term:ready', () => undefined)
   useSettingsStore.setState({ settings: structuredClone(DEFAULT_SETTINGS) })
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => rig.width)
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => rig.height)
