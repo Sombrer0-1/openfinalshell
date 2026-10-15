@@ -129,7 +129,18 @@ class LocalTerminalController private constructor() : TerminalHostController, Te
         return synchronized(current) { current.screen.transcriptTextWithoutJoinedLines }
     }
 
-    override fun onTextChanged(session: TerminalSession?) = publishSnapshot()
+    /** Fired after the local PTY has painted. Command capture uses it as the echo signal. */
+    var onEmulatorUpdated: (() -> Unit)? = null
+
+    fun bracketedPasteEnabled(): Boolean = emulator?.let { TerminalModes.bracketedPaste(it, null) } ?: false
+
+    /** False before the PTY exists or after the local shell has been closed. */
+    fun canAcceptInput(): Boolean = !closed && ::session.isInitialized
+
+    override fun onTextChanged(session: TerminalSession?) {
+        publishSnapshot()
+        onEmulatorUpdated?.invoke()
+    }
 
     override fun onTitleChanged(session: TerminalSession?) {
         title = session?.title

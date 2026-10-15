@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">편집기 인코딩: %1$s</string>
     <string name="port_encoding_unavailable">이 기기는 이 인코딩을 지원하지 않습니다.</string>
     <string name="port_encoding_lossless">선택한 인코딩으로 파일 또는 텍스트를 손실 없이 표현할 수 없습니다. 올바른 인코딩을 선택하고 다시 여세요. 변경 사항은 저장되지 않았습니다.</string>
+    <string name="port_editor_binary">이 파일은 바이너리 파일이므로 텍스트 편집기에서 열 수 없습니다.</string>
     <string name="port_eol_mixed">혼합 줄바꿈을 보존합니다. 새 줄은 입력한 줄바꿈을 유지합니다.</string>
 </resources>

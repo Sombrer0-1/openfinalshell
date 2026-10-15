@@ -57,6 +57,7 @@ data class TransferTask(
     val kind: TransferKind = TransferKind.UPLOAD,
     val localPath: String? = null,
     val speedBps: Long = 0,
+    val supportsResume: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val attempts: Int = 0
 )
@@ -135,7 +136,8 @@ class TransferQueue(private val scope: CoroutineScope, maxConcurrent: Int = 3) {
                 remotePath = remotePath,
                 bytesTotal = source.size,
                 kind = TransferKind.UPLOAD,
-                localPath = localPath
+                localPath = localPath,
+                supportsResume = source.supportsResume
             )
         )
         val operation = Operation(TaskControl(), { control, taskId ->
@@ -188,7 +190,8 @@ class TransferQueue(private val scope: CoroutineScope, maxConcurrent: Int = 3) {
                 remotePath = remotePath,
                 bytesTotal = bytesTotal,
                 kind = TransferKind.DOWNLOAD,
-                localPath = localPath
+                localPath = localPath,
+                supportsResume = sink.supportsResume
             )
         )
         val operation = Operation(TaskControl(), { control, taskId ->

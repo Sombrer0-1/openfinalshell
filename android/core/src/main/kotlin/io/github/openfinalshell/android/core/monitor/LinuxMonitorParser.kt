@@ -113,12 +113,31 @@ object LinuxMonitorParser {
         ProcInfo(pid, f.drop(10).joinToString(" "), cpu, mem)
     }.sortedByDescending { it.cpuPct }.take(limit).toList()
 
+    /**
+     * Parses the static frame, whose UNAME section is the output of `uname -srm`
+     * (`sysname release machine`).
+     *
+     * Tokens are validated before they are reported: a release or machine value is never a bare
+     * number, so a section polluted or truncated by an unusual shell presents as "unavailable"
+     * rather than as a number that looks like data.
+     */
     fun parseStatic(uname: String, hostname: String, nproc: String, osRelease: String, ipAddr: String): MonitorStaticInfo {
         val u = uname.trim().split(Regex("\\s+"))
         val distro = Regex("(?m)^(?:PRETTY_NAME|NAME)=\\\"?(.+?)\\\"?$").find(osRelease)?.groupValues?.get(1) ?: u.firstOrNull().orEmpty()
         val ips = Regex("inet\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)").findAll(ipAddr).map { it.groupValues[1] }.filter { it != "127.0.0.1" }.toList()
-        return MonitorStaticInfo(hostname.trim(), u.getOrNull(1).orEmpty(), u.getOrNull(2).orEmpty(), distro, nproc.trim().toIntOrNull()?.coerceAtLeast(1) ?: 1, ips)
+        return MonitorStaticInfo(
+            hostname.trim(),
+            u.getOrNull(1)?.takeIf(::isPlausibleStaticToken).orEmpty(),
+            u.getOrNull(2)?.takeIf(::isPlausibleStaticToken).orEmpty(),
+            distro,
+            nproc.trim().toIntOrNull()?.coerceAtLeast(1) ?: 1,
+            ips
+        )
     }
+
+    /** A release always carries a separator or letter (`6.6.66`, `24.6.0`); a machine is `x86_64`-shaped. */
+    private fun isPlausibleStaticToken(token: String): Boolean =
+        token.any { !it.isDigit() } || token.contains('.')
 
     fun parseSockstat(text: String): ConnectionCounts? {
         var sockets = 0

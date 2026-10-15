@@ -39,6 +39,7 @@
     <string name="status_forwarding_rule_save_failed">Forwarding rule save failed</string>
     <string name="status_forwarding_rule_delete_failed">Forwarding rule delete failed</string>
     <string name="status_forwarding_start_failed">Forwarding start failed</string>
+    <string name="status_forwarding_requires_ssh">Для переадресации портов требуется SSH-соединение.</string>
     <string name="status_profile_save_failed">Profile save failed</string>
     <string name="status_profile_delete_failed">Profile delete failed</string>
     <string name="status_group_save_failed">Group save failed</string>

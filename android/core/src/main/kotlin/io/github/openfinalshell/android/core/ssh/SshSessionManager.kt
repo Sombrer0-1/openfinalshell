@@ -198,7 +198,7 @@ class SshSessionManager(
         entry.intentionalClose = true
         entry.reconnectJob?.cancel()
         entry.reconnectJob = null
-        closeShells(entry)
+        closeShells(entry, ShellCloseReason.CLOSED)
         detachTransport(entry)
         entry.transport.disconnect()
         entry.credentials?.wipe()
@@ -239,11 +239,12 @@ class SshSessionManager(
     }
 
     private fun handleUnexpectedDisconnect(entry: Entry, cause: Throwable?) {
-        if (entry.intentionalClose || !shouldReconnect(entry.profile)) {
+        if (entry.intentionalClose) return
+        closeShells(entry, ShellCloseReason.DISCONNECTED)
+        if (!shouldReconnect(entry.profile)) {
             updateState(entry, SessionState.CLOSED, cause?.message)
             return
         }
-        closeShells(entry)
         updateState(entry, SessionState.RECONNECTING, cause?.message)
         scheduleReconnect(entry)
     }
@@ -288,7 +289,7 @@ class SshSessionManager(
         }
     }
 
-    private fun closeShells(entry: Entry) {
+    private fun closeShells(entry: Entry, reason: ShellCloseReason) {
         val shells = synchronized(lock) {
             val result = entry.shellJobs.keys.toList()
             entry.shellJobs.values.forEach { it.cancel() }
@@ -296,7 +297,7 @@ class SshSessionManager(
             result
         }
         shells.forEach { shell ->
-            mutableEvents.tryEmit(SessionEvent.ShellClosed(entry.sessionId, ShellCloseReason.CLOSED))
+            mutableEvents.tryEmit(SessionEvent.ShellClosed(entry.sessionId, reason))
             scope.launch { runCatching { shell.close() } }
         }
         updateShellCount(entry)

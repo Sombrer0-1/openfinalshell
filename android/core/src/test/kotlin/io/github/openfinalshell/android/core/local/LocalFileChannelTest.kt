@@ -55,6 +55,39 @@ class LocalFileChannelTest {
         assertEquals(SftpEntry.Type.SYMLINK, entry.type)
     }
 
+    @Test fun createExclusiveDoesNotReplaceAnExistingFile() = runTest {
+        val existing = temp.newFile("note.txt").apply { writeBytes("keep".toByteArray()) }
+        val error = runCatching { channel().createExclusive(existing.path, "new".toByteArray()) }.exceptionOrNull()
+        assertTrue("expected FileAlreadyExistsException but got $error", error is java.nio.file.FileAlreadyExistsException)
+        assertEquals("keep", existing.readText())
+        val created = File(temp.root, "fresh.txt")
+        channel().createExclusive(created.path, "fresh".toByteArray())
+        assertEquals("fresh", created.readText())
+    }
+
+    @Test fun realpathAndLstatExposeTheLocalFile() = runTest {
+        val file = temp.newFile("meta.txt").apply { writeBytes("ab".toByteArray()) }
+        val sut = channel()
+        assertEquals(file.canonicalPath, sut.realpath(file.path))
+        val stat = sut.lstat(file.path)
+        assertEquals(SftpEntry.Type.FILE, stat!!.type)
+        assertEquals(2L, stat.size)
+        assertTrue(stat.modifiedAtMillis != null)
+        assertEquals(null, sut.lstat(File(temp.root, "missing-meta").path))
+    }
+
+    @Test fun atomicTextSaveRestoresSpecialPermissionBitsOnTheTemporaryFile() = runTest {
+        assumeTrue("requires unix mode attributes", Files.getFileStore(temp.root.toPath()).supportsFileAttributeView("unix"))
+        val file = temp.newFile("mode.txt").apply { writeText("original") }
+        val sut = channel()
+        for (mode in listOf("4755", "2750", "1755").map { it.toInt(8) }) {
+            Files.setAttribute(file.toPath(), "unix:mode", mode)
+            val original = io.github.openfinalshell.android.core.sftp.RemoteTextEditor.load(sut, file.path)
+            io.github.openfinalshell.android.core.sftp.RemoteTextEditor.save(sut, original, "updated")
+            assertEquals(mode, (Files.getAttribute(file.toPath(), "unix:mode") as Int) and 0xFFF)
+        }
+    }
+
     @Test fun readsAndWritesWholeFiles() = runTest {
         val path = File(temp.root, "whole.bin").path
         val sut = channel()

@@ -108,8 +108,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setTerminalFontSize(value: Int) = update { it.copy(terminalFontSize = value) }
     fun setTerminalCursorStyle(value: String) = update { it.copy(terminalCursorStyle = value) }
     fun setTerminalScrollbackLines(value: Int) = update { it.copy(terminalScrollbackLines = value) }
+    fun setTerminalPalette(value: String) = update { it.copy(terminalPalette = value) }
+    fun setTerminalLineHeight(value: String) = update { it.copy(terminalLineHeight = value) }
+    fun setTerminalCursorBlink(enabled: Boolean) = update { it.copy(terminalCursorBlink = enabled) }
+    fun setTerminalCopyOnSelect(enabled: Boolean) = update { it.copy(terminalCopyOnSelect = enabled) }
+    fun setTerminalConfirmMultilinePaste(enabled: Boolean) = update { it.copy(terminalConfirmMultilinePaste = enabled) }
     fun setSftpConcurrency(value: Int) = update { it.copy(sftpConcurrency = value) }
     fun setSftpConflictPolicy(value: String) = update { it.copy(sftpConflictPolicy = value) }
+    fun setSftpFileTap(value: String) = update { it.copy(sftpFileTap = value) }
     fun setSftpShowHiddenFiles(enabled: Boolean) = update { it.copy(sftpShowHiddenFiles = enabled) }
     fun setMonitorIntervalSeconds(value: Int) = update { it.copy(monitorIntervalSeconds = value) }
     fun setDownloadDirectoryUri(uri: String?) = update { it.copy(downloadDirectoryUri = uri) }
@@ -121,6 +127,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      * probed at each connect, and this only decides whether the tier may be offered at all.
      */
     fun setLocalAllowRoot(enabled: Boolean) = update { it.copy(localAllowRoot = enabled) }
+
+    fun setSessionConnectionWidth(dp: Int) = update { it.copy(sessionConnectionWidthDp = dp) }
+
+    fun setSessionMonitorWidth(dp: Int) = update { it.copy(sessionMonitorWidthDp = dp) }
+
+    fun setSessionFileHeight(dp: Int) = update { it.copy(sessionFileHeightDp = dp) }
 
     fun checkForUpdates() {
         viewModelScope.launch {

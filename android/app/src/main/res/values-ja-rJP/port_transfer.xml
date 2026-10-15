@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">エディターの文字コード：%1$s</string>
     <string name="port_encoding_unavailable">このデバイスではこの文字コードを利用できません。</string>
     <string name="port_encoding_lossless">選択した文字コードでは内容を損失なく表現できません。正しい文字コードで開き直してください。変更は保存されていません。</string>
+    <string name="port_editor_binary">このファイルはバイナリのため、テキストエディターでは開けません。</string>
     <string name="port_eol_mixed">混在する改行を保持します。追加行は入力時の改行を保持します。</string>
 </resources>

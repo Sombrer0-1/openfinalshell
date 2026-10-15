@@ -25,4 +25,33 @@ class LinuxMonitorParserTest {
         assertEquals(25.0, fs.single().usePct)
         assertEquals(3, LinuxMonitorParser.parseTcpStates("01 2\n0A 1\nff 3\n").size)
     }
+
+    @Test
+    fun `static info keeps uname release and machine tokens`() {
+        val info = LinuxMonitorParser.parseStatic(
+            uname = "Linux 6.6.66-android15 x86_64",
+            hostname = "device",
+            nproc = "4",
+            osRelease = "PRETTY_NAME=\"Android 16 (device)\"",
+            ipAddr = "inet 10.0.2.15/24 brd 10.0.2.255"
+        )
+        assertEquals("6.6.66-android15", info.kernel)
+        assertEquals("x86_64", info.arch)
+        assertEquals("Android 16 (device)", info.distro)
+        assertEquals(listOf("10.0.2.15"), info.ips)
+    }
+
+    @Test
+    fun `static info drops bare-number tokens instead of showing them`() {
+        val info = LinuxMonitorParser.parseStatic(
+            uname = "Linux 1",
+            hostname = "device",
+            nproc = "",
+            osRelease = "",
+            ipAddr = ""
+        )
+        assertEquals("", info.kernel)
+        assertEquals("", info.arch)
+        assertEquals(1, info.cpuCores)
+    }
 }

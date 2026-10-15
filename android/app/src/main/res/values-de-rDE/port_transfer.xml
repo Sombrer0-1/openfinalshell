@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">Editor-Zeichencodierung: %1$s</string>
     <string name="port_encoding_unavailable">Diese Codierung ist auf diesem Gerät nicht verfügbar.</string>
     <string name="port_encoding_lossless">Datei oder Text sind in dieser Codierung nicht verlustfrei darstellbar. Wählen Sie die richtige Codierung und öffnen Sie die Datei erneut. Es wurde nichts gespeichert.</string>
+    <string name="port_editor_binary">Diese Datei ist binär und kann nicht im Texteditor geöffnet werden.</string>
     <string name="port_eol_mixed">Gemischte Zeilenenden bleiben erhalten. Neue Zeilen behalten die eingegebenen Zeilenenden.</string>
 </resources>

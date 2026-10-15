@@ -48,4 +48,19 @@ class TerminalSizeTrackerTest {
 
         assertEquals(TerminalSizeTracker.Size(90, 20), tracker.beginOpen(90, 20))
     }
+
+    @Test
+    fun `prepareRebind keeps the measured size and lets the next open start`() {
+        val tracker = TerminalSizeTracker()
+        tracker.beginOpen(80, 24)
+        tracker.noteResize(100, 40)
+        tracker.finishOpen(80, 24)
+        tracker.markApplied(100, 40)
+
+        assertNull(tracker.beginOpen(100, 40))
+        tracker.prepareRebind()
+
+        assertEquals(TerminalSizeTracker.Size(100, 40), tracker.desiredSize())
+        assertEquals(TerminalSizeTracker.Size(100, 40), tracker.beginOpen(100, 40))
+    }
 }

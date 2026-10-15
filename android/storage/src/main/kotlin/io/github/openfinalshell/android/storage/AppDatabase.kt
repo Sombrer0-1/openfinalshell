@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DocumentEntity::class,
         AiProfileEntity::class, CommandGroupEntity::class, CommandSnippetEntity::class, CommandHistoryEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +40,36 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("CREATE TABLE IF NOT EXISTS command_groups (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, sortOrder INTEGER NOT NULL)")
                 database.execSQL("CREATE TABLE IF NOT EXISTS command_snippets (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL, groupId TEXT, updatedAt INTEGER NOT NULL)")
                 database.execSQL("CREATE TABLE IF NOT EXISTS command_history (id TEXT NOT NULL PRIMARY KEY, secretRef TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+            }
+        }
+
+        /**
+         * Adds useCount and lastSubmittedAt without ALTER TABLE. A NOT NULL column added with a
+         * SQL DEFAULT remains visible in PRAGMA table_info and does not match the Room entity.
+         * Existing rows count as one use at their original createdAt.
+         */
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("DROP TABLE IF EXISTS `command_history_new`")
+                database.execSQL(
+                    """CREATE TABLE `command_history_new` (
+                        `id` TEXT NOT NULL,
+                        `secretRef` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `useCount` INTEGER NOT NULL,
+                        `lastSubmittedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )"""
+                )
+                if (hasTable(database, "command_history")) {
+                    database.execSQL(
+                        """INSERT INTO `command_history_new`
+                            (`id`, `secretRef`, `createdAt`, `useCount`, `lastSubmittedAt`)
+                            SELECT `id`, `secretRef`, `createdAt`, 1, `createdAt` FROM `command_history`"""
+                    )
+                    database.execSQL("DROP TABLE `command_history`")
+                }
+                database.execSQL("ALTER TABLE `command_history_new` RENAME TO `command_history`")
             }
         }
         /**
@@ -72,6 +102,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_1_2)
                 .addMigrations(MIGRATION_2_3)
                 .addMigrations(MIGRATION_3_4)
+                .addMigrations(MIGRATION_4_5)
                 .build()
 
         private fun rebuildProfiles(database: SupportSQLiteDatabase) {

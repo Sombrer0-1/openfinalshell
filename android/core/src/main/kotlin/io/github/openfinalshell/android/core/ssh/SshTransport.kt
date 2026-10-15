@@ -106,7 +106,7 @@ sealed interface ShellEvent {
     data class Closed(val reason: ShellCloseReason) : ShellEvent
 }
 
-enum class ShellCloseReason { CLOSED, ERROR }
+enum class ShellCloseReason { CLOSED, ERROR, DISCONNECTED }
 
 interface SftpChannel {
     suspend fun list(path: String): List<SftpEntry>
@@ -121,7 +121,16 @@ interface SftpChannel {
     suspend fun mkdir(path: String) { error("mkdir is not supported by this transport") }
     suspend fun rename(from: String, to: String) { error("rename is not supported by this transport") }
     suspend fun atomicReplace(from: String, to: String) { throw AtomicReplaceUnavailable() }
+    /** Sets all twelve permission bits; UI callers merge unchanged special bits before calling. */
     suspend fun permissions(path: String, mode: Int) { error("permissions are not supported by this transport") }
+    /** Creates the path only when it is absent. Existing targets must fail and stay untouched. */
+    suspend fun createExclusive(path: String, data: ByteArray) {
+        error("exclusive create is not supported by this transport")
+    }
+    /** Canonical path. The default is the requested path, which has not been resolved. */
+    suspend fun realpath(path: String): String = path
+    /** Metadata without following links, or null when the path is absent. */
+    suspend fun lstat(path: String): SftpEntry? = null
     suspend fun writeChunk(path: String, data: ByteArray, offset: Long, truncate: Boolean = false) {
         require(offset == 0L) { "the transport does not support ranged writes" }
         write(path, data)
@@ -132,6 +141,16 @@ interface SftpChannel {
 
 class AtomicReplaceUnavailable : IllegalStateException("atomic replacement is unavailable")
 
-data class SftpEntry(val name: String, val path: String, val type: Type, val size: Long? = null, val permissions: Int? = null) {
+data class SftpEntry(
+    val name: String,
+    val path: String,
+    val type: Type,
+    val size: Long? = null,
+    val permissions: Int? = null,
+    val owner: String? = null,
+    val group: String? = null,
+    val modifiedAtMillis: Long? = null,
+    val nameInvalid: Boolean = false,
+) {
     enum class Type { FILE, DIRECTORY, SYMLINK, OTHER }
 }

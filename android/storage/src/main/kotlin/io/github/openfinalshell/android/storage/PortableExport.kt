@@ -4,19 +4,42 @@ import io.github.openfinalshell.android.core.model.ConnectionProfile
 import io.github.openfinalshell.android.core.model.ForwardRule
 import io.github.openfinalshell.android.core.model.LOCAL_SHELL_PROTOCOL
 import io.github.openfinalshell.android.core.protocol.ProtocolJson
+import io.github.openfinalshell.android.core.workspace.ConflictAction
+import io.github.openfinalshell.android.core.workspace.DropReason
+import io.github.openfinalshell.android.core.workspace.HostTrustDecision
+import io.github.openfinalshell.android.core.workspace.ImportCatalog
+import io.github.openfinalshell.android.core.workspace.ImportCategory
+import io.github.openfinalshell.android.core.workspace.ImportCommand
+import io.github.openfinalshell.android.core.workspace.ImportCommandGroup
+import io.github.openfinalshell.android.core.workspace.ImportConnection
+import io.github.openfinalshell.android.core.workspace.ImportForward
+import io.github.openfinalshell.android.core.workspace.ImportGroup
+import io.github.openfinalshell.android.core.workspace.ImportHostTrust
+import io.github.openfinalshell.android.core.workspace.ImportKind
+import io.github.openfinalshell.android.core.workspace.ImportPlan
+import io.github.openfinalshell.android.core.workspace.ImportPlanResult
+import io.github.openfinalshell.android.core.workspace.ImportPrivateKey
+import io.github.openfinalshell.android.core.workspace.ImportProxy
+import io.github.openfinalshell.android.core.workspace.LocalIndex
+import io.github.openfinalshell.android.core.workspace.PlannedConnection
+import io.github.openfinalshell.android.core.workspace.RecordRef
+import io.github.openfinalshell.android.core.workspace.RowAction
+import io.github.openfinalshell.android.core.workspace.persists
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.util.UUID
 
 data class StorageExportSnapshot(
     val profiles: List<ConnectionProfile>,
@@ -59,6 +82,27 @@ data class PortableImportResult(
     val invalid: Int,
     val notes: List<String> = emptyList(),
     val snippets: Int = 0
+)
+
+/**
+ * Decrypted portable records. Secret values stay here so a preview can show the catalog
+ * without copying passwords into composition. Source paths and desktop material refs are not
+ * treated as key material.
+ */
+data class PortableSource(
+    val catalog: ImportCatalog,
+    val profiles: Map<String, JsonObject>,
+    val groupOrder: Map<String, Double>,
+    val proxyTimes: Map<String, Pair<Long, Long>>,
+    val keyTimes: Map<String, Pair<Long, Long>>,
+    val commandGroupOrder: Map<String, Int>,
+    val commands: Map<String, Pair<String, Long>>,
+    val hosts: Map<String, Pair<String, Long>>,
+    val secretValues: Map<String, String>,
+    val invalid: Int,
+    val rdpSkipped: Int,
+    val materialRefsIgnored: Int,
+    val secretsLocked: Boolean
 )
 
 /**
@@ -253,6 +297,59 @@ object PortableExport {
         )
     }
 
+    /**
+     * Opens an envelope into a catalog. A v2 file needs a passphrase. A v1 file with a sealed
+     * secret block can be opened without one; the configuration stays readable and [PortableSource.secretsLocked]
+     * is set. Desktop `materialRef` ciphertext is counted and dropped.
+     */
+    fun readSource(envelope: ExportEnvelope, passphrase: CharArray?): PortableSource {
+        require(envelope.app == "openfinalshell") { "unsupported export application" }
+        val decryptedV2 = if (envelope.formatVersion == 2) {
+            val key = passphrase ?: error("passphrase required")
+            decrypt(envelope, key).jsonObject
+        } else null
+        val payload = when (envelope.formatVersion) {
+            1 -> envelope.data ?: error("v1 export has no data")
+            2 -> decryptedV2 ?: error("invalid v2 payload")
+            else -> error("unsupported export format version: ${envelope.formatVersion}")
+        }
+        val secretsLocked = envelope.formatVersion == 1 && envelope.secrets != null && passphrase == null
+        val secretValues = when {
+            secretsLocked -> emptyMap()
+            envelope.formatVersion == 1 && envelope.secrets != null ->
+                decodeSecrets(ImportExportCrypto.open(envelope.secrets, passphrase ?: error("passphrase required")))
+            envelope.formatVersion == 2 -> decodeSecrets(
+                ProtocolJson.instance.encodeToString(
+                    JsonObject.serializer(),
+                    (decryptedV2?.get("secrets") as? JsonObject) ?: JsonObject(emptyMap())
+                ).toByteArray(Charsets.UTF_8)
+            )
+            else -> emptyMap()
+        }
+        val objectPayload = payload as? JsonObject ?: error("invalid payload")
+        val root = if (envelope.formatVersion == 2) objectPayload["data"] as? JsonObject ?: error("invalid v2 payload") else objectPayload
+        return readRoot(root, secretValues, secretsLocked)
+    }
+
+    suspend fun localIndex(
+        profiles: ProfileRepository,
+        forwards: ForwardRepository,
+        groups: ConnectionGroupRepository,
+        proxies: SavedProxyRepository,
+        privateKeys: PrivateKeyRepository,
+        knownHosts: KnownHostRepository,
+        tools: ToolDao?
+    ): LocalIndex = LocalIndex(
+        groups = groups.list().map { it.id }.toSet(),
+        proxies = proxies.list().map { it.id }.toSet(),
+        privateKeyFingerprints = privateKeys.list().associate { it.id to it.sha256 },
+        connections = profiles.list().map { it.id }.toSet(),
+        forwards = forwards.list().map { it.id }.toSet(),
+        commandGroups = tools?.groups()?.map { it.id }?.toSet().orEmpty(),
+        commands = tools?.snippets()?.map { it.id }?.toSet().orEmpty(),
+        hostTrustFingerprints = knownHosts.list().associate { it.key to it.fingerprintSha256 }
+    )
+
     /** Apply a decrypted envelope to Room. The caller supplies repositories to keep this layer UI independent. */
     suspend fun importInto(
         envelope: ExportEnvelope,
@@ -267,186 +364,326 @@ object PortableExport {
         conflict: ImportConflict = ImportConflict.SKIP,
         tools: ToolDao? = null
     ): PortableImportResult {
-        require(envelope.app == "openfinalshell") { "unsupported export application" }
-        val decryptedV2 = if (envelope.formatVersion == 2) {
-            val key = passphrase ?: error("passphrase required")
-            decrypt(envelope, key).jsonObject
-        } else null
-        val payload = when (envelope.formatVersion) {
-            1 -> envelope.data ?: error("v1 export has no data")
-            2 -> decryptedV2 ?: error("invalid v2 payload")
-            else -> error("unsupported export format version: ${envelope.formatVersion}")
+        val source = readSource(envelope, passphrase)
+        val local = localIndex(profiles, forwards, groups, proxies, privateKeys, knownHosts, tools)
+        val action = when (conflict) {
+            ImportConflict.SKIP -> ConflictAction.Skip
+            ImportConflict.OVERWRITE -> ConflictAction.Overwrite
+            ImportConflict.DUPLICATE -> ConflictAction.Duplicate
         }
-        val secretMap = when {
-            envelope.formatVersion == 1 && envelope.secrets != null ->
-                if (passphrase == null) emptyMap()
-                else decodeSecrets(ImportExportCrypto.open(envelope.secrets, passphrase))
-            envelope.formatVersion == 2 -> decodeSecrets(
-                ProtocolJson.instance.encodeToString(
-                    JsonObject.serializer(),
-                    decryptedV2?.get("secrets")?.jsonObject ?: JsonObject(emptyMap())
-                ).toByteArray(Charsets.UTF_8)
-            )
-            else -> emptyMap()
+        val plan = ImportPlan.build(
+            source.catalog,
+            local,
+            ImportCategory.entries.toSet(),
+            action,
+            emptySet(),
+            { _, _ -> UUID.randomUUID().toString() },
+            { UUID.randomUUID().toString() }
+        )
+        return applyPlan(source, plan, profiles, forwards, groups, proxies, privateKeys, knownHosts, credentials, tools)
+    }
+
+    /**
+     * Writes [plan] after its associations check out. Skip rows keep the local record and its
+     * secrets. A private-key overwrite keeps Keystore material only when the plan says the
+     * fingerprints match; this function never deletes that material. Host trust is inserted only
+     * for a new key, using the original key, and an existing row is left as it is.
+     */
+    suspend fun applyPlan(
+        source: PortableSource,
+        plan: ImportPlanResult,
+        profiles: ProfileRepository,
+        forwards: ForwardRepository,
+        groups: ConnectionGroupRepository,
+        proxies: SavedProxyRepository,
+        privateKeys: PrivateKeyRepository,
+        knownHosts: KnownHostRepository,
+        credentials: AndroidCredentialStore,
+        tools: ToolDao? = null
+    ): PortableImportResult {
+        val fresh = localIndex(profiles, forwards, groups, proxies, privateKeys, knownHosts, tools)
+        if (tools == null && (plan.commandGroups.isNotEmpty() || plan.commands.isNotEmpty())) error("command library is unavailable")
+        checkAssociations(plan, fresh)
+        for (row in plan.privateKeys) {
+            if (row.action != RowAction.Overwrite) continue
+            val existing = privateKeys.find(row.targetId) ?: error("private key ${row.targetId} is no longer on this device")
+            if (existing.sha256 != row.fingerprint) error("private key fingerprint changed; local material was kept")
         }
-        val root = if (envelope.formatVersion == 2) {
-            payload["data"]?.jsonObject ?: error("invalid v2 payload")
-        } else payload.jsonObject
-        var skipped = 0
-        var invalid = 0
-        var profileCount = 0
-        var groupCount = 0
-        var proxyCount = 0
-        var keyCount = 0
-        var hostCount = 0
         val notes = mutableListOf<String>()
-        val groupElements = root["groups"]?.jsonArray ?: JsonArray(emptyList())
-        for (element in groupElements) {
-            if (element !is JsonObject) { invalid++; continue }
-            val value = element
-            val id = value["id"]?.jsonPrimitive?.contentOrNull
-            val name = value["name"]?.jsonPrimitive?.contentOrNull
-            if (id == null || name == null) { invalid++; continue }
-            if (conflict == ImportConflict.SKIP && groups.find(id) != null) { skipped++; continue }
-            val targetId = if (conflict == ImportConflict.DUPLICATE) java.util.UUID.randomUUID().toString() else id
-            groups.upsert(ConnectionGroupEntity(targetId, name, value["parentId"]?.jsonPrimitive?.contentOrNull, value["order"]?.jsonPrimitive?.doubleOrNull ?: 0.0))
-            groupCount++
-        }
-        val proxyElements = root["proxies"]?.jsonArray ?: JsonArray(emptyList())
-        for (element in proxyElements) {
-            if (element !is JsonObject) { invalid++; continue }
-            val value = element
-            val id = value["id"]?.jsonPrimitive?.contentOrNull
-            val name = value["name"]?.jsonPrimitive?.contentOrNull
-            val type = value["type"]?.jsonPrimitive?.contentOrNull
-            val host = value["host"]?.jsonPrimitive?.contentOrNull
-            val port = value["port"]?.jsonPrimitive?.intOrNull
-            if (id == null || name == null || type == null || host == null || port == null) { invalid++; continue }
-            if (conflict == ImportConflict.SKIP && proxies.find(id) != null) { skipped++; continue }
-            val targetId = if (conflict == ImportConflict.DUPLICATE) java.util.UUID.randomUUID().toString() else id
-            val passwordRef = value["passwordRef"]?.jsonPrimitive?.contentOrNull?.takeIf { secretMap.containsKey(it) }
-            if (value["passwordRef"] != null && passwordRef == null) {
-                notes += "代理 $name 的密码未包含在导出文件中，需要重新录入"
+        if (source.rdpSkipped > 0) notes += "Skipped ${source.rdpSkipped} RDP connections"
+        if (source.materialRefsIgnored > 0) notes += "Private key material from another device was not imported"
+        if (source.secretsLocked) notes += "Sealed secrets were not opened"
+        plan.dropped.forEach { drop ->
+            notes += when (drop.reason) {
+                DropReason.PrivateKeyFingerprintMismatch -> "Private key fingerprint differs; local material was kept"
+                DropReason.DependencyCancelled -> "Cleared because a required item was cleared"
+                DropReason.DanglingReference -> "Missing required item"
+                DropReason.NoLongerRequired -> "No longer required"
             }
-            proxies.upsert(SavedProxyEntity(targetId, name, type, host, port, value["username"]?.jsonPrimitive?.contentOrNull, passwordRef, value["createdAt"]?.jsonPrimitive?.longOrNull ?: 0L, value["updatedAt"]?.jsonPrimitive?.longOrNull ?: 0L))
-            proxyCount++
         }
-        val keyElements = root["privateKeys"]?.jsonArray ?: JsonArray(emptyList())
-        for (element in keyElements) {
-            if (element !is JsonObject) { invalid++; continue }
-            val value = element
-            val id = value["id"]?.jsonPrimitive?.contentOrNull
-            val name = value["name"]?.jsonPrimitive?.contentOrNull
-            val path = (value["path"] ?: value["originalPath"])?.jsonPrimitive?.contentOrNull
-            if (id == null || name == null || path == null) {
-                if (value.containsKey("materialRef")) notes += "私钥 $name 的 Windows DPAPI/materialRef 无法在 Android 导入"
+        for (secret in plan.secrets) {
+            val value = source.secretValues[secret.sourceRef] ?: error("secret ${secret.sourceRef} is not in the file")
+            credentials.put(value, secret.localRef)
+        }
+        for (row in plan.groups) {
+            groups.upsert(ConnectionGroupEntity(row.targetId, row.name, row.parentId, source.groupOrder[row.sourceId] ?: 0.0))
+        }
+        for (row in plan.proxies) {
+            val times = source.proxyTimes[row.sourceId] ?: (0L to 0L)
+            val previous = proxies.find(row.targetId)
+            if (row.pendingSecret) notes += "Proxy ${row.name} is missing its password"
+            proxies.upsert(
+                SavedProxyEntity(
+                    row.targetId, row.name, row.type, row.host, row.port, row.username, row.passwordRef,
+                    previous?.createdAt?.takeIf { it > 0L } ?: times.first,
+                    System.currentTimeMillis()
+                )
+            )
+        }
+        for (row in plan.privateKeys) {
+            val times = source.keyTimes[row.sourceId] ?: (0L to 0L)
+            val previous = if (row.action == RowAction.Overwrite) privateKeys.find(row.targetId) else null
+            val keepMaterial = row.action == RowAction.Overwrite && previous?.sha256 == row.fingerprint
+            if (row.materialPending && !keepMaterial) notes += "Private key ${row.name} needs its key file"
+            if (row.pendingSecret) notes += "Private key ${row.name} is missing its passphrase"
+            privateKeys.upsert(
+                PrivateKeyEntity(
+                    id = row.targetId,
+                    name = row.name,
+                    originalPath = if (keepMaterial) previous?.originalPath else null,
+                    sha256 = row.fingerprint,
+                    passphraseRef = row.passphraseRef,
+                    materialRef = retainedMaterialRef(previous?.materialRef, keepMaterial),
+                    createdAt = previous?.createdAt?.takeIf { it > 0L } ?: times.first,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+        val catalogConnections = source.catalog.connections.map { it.id }.toSet()
+        val connectionIds = plan.idMap.filterKeys { it.kind == ImportKind.Connection }.mapKeys { it.key.id }.mapValues { it.value }
+        for (row in plan.connections) {
+            val raw = source.profiles[row.sourceId] ?: error("connection ${row.sourceId} is missing")
+            if (row.pendingSecrets.isNotEmpty()) notes += "Connection ${row.name} is missing ${row.pendingSecrets.joinToString()}"
+            profiles.upsertImported(rewriteImportedProfile(raw, row, connectionIds, catalogConnections), row.targetId)
+        }
+        for (row in plan.forwards) {
+            forwards.upsert(ForwardRule(row.targetId, row.profileId, row.type, row.label, row.bindAddr, row.bindPort, row.dstHost, row.dstPort, row.autoStart))
+        }
+        if (tools != null) {
+            for (row in plan.commandGroups) {
+                tools.save(CommandGroupEntity(row.targetId, row.name, source.commandGroupOrder[row.sourceId] ?: 0))
+            }
+            for (row in plan.commands) {
+                val body = source.commands[row.sourceId] ?: error("command ${row.sourceId} is missing")
+                tools.save(CommandSnippetEntity(row.targetId, row.name, body.first, row.groupId, body.second))
+            }
+        }
+        var hostCount = 0
+        for (decision in plan.hostTrust) {
+            val storageKey = hostTrustStorageKey(decision) ?: continue
+            if (knownHosts.find(storageKey) != null) {
+                notes += "Host trust for $storageKey already exists and was kept"
+                continue
+            }
+            val meta = source.hosts[decision.key] ?: continue
+            knownHosts.trust(KnownHostEntity(storageKey, meta.first, decision.incomingFingerprint, meta.second))
+            hostCount++
+        }
+        val skipped = plan.skipped.size + plan.hostTrust.count { it.action == RowAction.Skip || it.action == RowAction.Block }
+        return PortableImportResult(
+            profiles = plan.connections.size,
+            groups = plan.groups.size,
+            proxies = plan.proxies.size,
+            privateKeys = plan.privateKeys.size,
+            forwards = plan.forwards.size,
+            knownHosts = hostCount,
+            secrets = plan.secrets.size,
+            skipped = skipped,
+            invalid = source.invalid,
+            notes = notes,
+            snippets = plan.commands.size
+        )
+    }
+
+    private fun readRoot(root: JsonObject, secretValues: Map<String, String>, secretsLocked: Boolean): PortableSource {
+        fun array(name: String): List<JsonElement> {
+            val items = (root[name] as? JsonArray)?.toList().orEmpty()
+            require(items.size <= 10_000) { "import limit" }
+            return items
+        }
+        var invalid = 0
+        var rdpSkipped = 0
+        var materialRefsIgnored = 0
+        val groups = mutableListOf<ImportGroup>()
+        val groupOrder = linkedMapOf<String, Double>()
+        for (element in array("groups")) {
+            val value = element as? JsonObject
+            if (value == null) {
                 invalid++
                 continue
             }
-            if (conflict == ImportConflict.SKIP && privateKeys.find(id) != null) { skipped++; continue }
-            if (value.containsKey("materialRef")) {
-                notes += "私钥 $name 的 materialRef 是桌面端本机密文，Android 未导入私钥材料；请重新选择私钥文件"
-            }
-            val existing = privateKeys.find(id)
-            val passphraseRef = value["passphraseRef"]?.jsonPrimitive?.contentOrNull?.takeIf { secretMap.containsKey(it) }
-            if (value["passphraseRef"] != null && passphraseRef == null) {
-                notes += "私钥 $name 的口令未包含在导出文件中，需要重新录入"
-            }
-            // A portable export intentionally omits key bytes. Never re-use an existing local
-            // Keystore reference for overwrite/duplicate imports, or a profile could silently
-            // authenticate with a different private key than the imported metadata describes.
-            if (conflict == ImportConflict.OVERWRITE) {
-                existing?.materialRef?.let { credentials.delete(it) }
-            }
-            privateKeys.upsert(
-                PrivateKeyEntity(
-                    id = if (conflict == ImportConflict.DUPLICATE) java.util.UUID.randomUUID().toString() else id,
-                    name = name,
-                    originalPath = path,
-                    sha256 = value["sourceFingerprint"]?.jsonPrimitive?.contentOrNull ?: "",
-                    passphraseRef = passphraseRef,
-                    materialRef = null,
-                    createdAt = value["createdAt"]?.jsonPrimitive?.longOrNull ?: 0L,
-                    updatedAt = value["updatedAt"]?.jsonPrimitive?.longOrNull ?: 0L
-                )
-            )
-            keyCount++
+            val id = text(value, "id")
+            val name = text(value, "name")
+            if (id == null || name == null) { invalid++; continue }
+            groups += ImportGroup(id, name, text(value, "parentId"))
+            groupOrder[id] = (value["order"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
         }
-        val hostElements = root["knownHosts"]?.jsonArray ?: JsonArray(emptyList())
-        for (element in hostElements) {
-            if (element !is JsonObject) { invalid++; continue }
-            val value = element
-            val key = value["key"]?.jsonPrimitive?.contentOrNull
-            val keyType = value["keyType"]?.jsonPrimitive?.contentOrNull
-            val fingerprint = value["fingerprintSha256"]?.jsonPrimitive?.contentOrNull
-            if (key == null || keyType == null || fingerprint == null) { invalid++; continue }
-            if (conflict == ImportConflict.SKIP && knownHosts.find(key) != null) { skipped++; continue }
-            val targetKey = if (conflict == ImportConflict.DUPLICATE) "$key:${java.util.UUID.randomUUID()}" else key
-            knownHosts.trust(KnownHostEntity(targetKey, keyType, fingerprint, value["addedAt"]?.jsonPrimitive?.longOrNull ?: 0L))
-            hostCount++
+        val proxies = mutableListOf<ImportProxy>()
+        val proxyTimes = linkedMapOf<String, Pair<Long, Long>>()
+        for (element in array("proxies")) {
+            val value = element as? JsonObject
+            if (value == null) {
+                invalid++
+                continue
+            }
+            val id = text(value, "id")
+            val name = text(value, "name")
+            val type = text(value, "type")
+            val host = text(value, "host")
+            val port = intOf(value, "port")
+            if (id == null || name == null || type == null || host == null || port == null) { invalid++; continue }
+            proxies += ImportProxy(id, name, type, host, port, text(value, "username"), text(value, "passwordRef"))
+            proxyTimes[id] = longOf(value, "createdAt") to longOf(value, "updatedAt")
         }
-        val profileElements = root["profiles"]?.jsonArray ?: JsonArray(emptyList())
-        for (element in profileElements) {
-            if (element !is JsonObject) { invalid++; continue }
-            val raw = element
-            val parsed = runCatching { ProtocolJson.instance.decodeFromJsonElement(ConnectionProfile.serializer(), raw) }.getOrNull()
+        val keys = mutableListOf<ImportPrivateKey>()
+        val keyTimes = linkedMapOf<String, Pair<Long, Long>>()
+        for (element in array("privateKeys")) {
+            val value = element as? JsonObject
+            if (value == null) {
+                invalid++
+                continue
+            }
+            val id = text(value, "id")
+            val name = text(value, "name")
+            if (id == null || name == null) { invalid++; continue }
+            if (value.containsKey("materialRef")) materialRefsIgnored++
+            val fingerprint = text(value, "sourceFingerprint") ?: text(value, "sha256") ?: ""
+            keys += ImportPrivateKey(id, name, fingerprint, text(value, "passphraseRef"))
+            keyTimes[id] = longOf(value, "createdAt") to longOf(value, "updatedAt")
+        }
+        val profileJson = linkedMapOf<String, JsonObject>()
+        val connections = mutableListOf<ImportConnection>()
+        for (element in array("profiles")) {
+            val value = element as? JsonObject
+            if (value == null) {
+                invalid++
+                continue
+            }
+            val parsed = runCatching { ProtocolJson.instance.decodeFromJsonElement(ConnectionProfile.serializer(), value) }.getOrNull()
             if (parsed == null) { invalid++; continue }
-            // A local session describes a shell path, a privilege tier and a start directory on the
-            // device it was created on. Nothing legitimate puts one in an export, so a hand-edited
-            // or hostile file must not be able to inject one and have it later opened at the root
-            // tier. Counted as invalid rather than skipped, matching every other refused record.
             if (parsed.protocol == LOCAL_SHELL_PROTOCOL) { invalid++; continue }
-            if (conflict == ImportConflict.SKIP && profiles.find(parsed.id) != null) { skipped++; continue }
-            val sanitized = clearUnavailableSecretRefs(raw, secretMap, notes)
-            profiles.upsertImported(sanitized, if (conflict == ImportConflict.DUPLICATE) java.util.UUID.randomUUID().toString() else parsed.id)
-            profileCount++
+            if (parsed.protocol.equals("rdp", ignoreCase = true)) { rdpSkipped++; continue }
+            profileJson[parsed.id] = value
+            connections += ImportConnection(
+                parsed.id, parsed.name, parsed.host, parsed.port, parsed.username,
+                parsed.groupId, parsed.proxyId, parsed.auth.privateKeyId, parsed.auth.passwordRef, parsed.auth.passphraseRef,
+                proxyPasswordRef = parsed.proxy?.passwordRef
+            )
         }
-        val forwardElements = root["forwards"]?.jsonArray ?: JsonArray(emptyList())
-        var forwardCount = 0
-        for (element in forwardElements) {
-            val parsed = runCatching { ProtocolJson.instance.decodeFromJsonElement(ForwardRule.serializer(), element) }.getOrNull()
+        val forwards = mutableListOf<ImportForward>()
+        for (element in array("forwards")) {
+            val parsed = (element as? JsonObject)?.let { runCatching { ProtocolJson.instance.decodeFromJsonElement(ForwardRule.serializer(), it) }.getOrNull() }
             if (parsed == null) { invalid++; continue }
-            if (conflict == ImportConflict.SKIP && forwards.find(parsed.id) != null) { skipped++; continue }
-            forwards.upsert(parsed.copy(id = if (conflict == ImportConflict.DUPLICATE) java.util.UUID.randomUUID().toString() else parsed.id))
-            forwardCount++
+            forwards += ImportForward(parsed.id, parsed.profileId, parsed.type, parsed.label, parsed.bindAddr, parsed.bindPort, parsed.dstHost, parsed.dstPort, parsed.autoStart)
         }
-        // Material refs from Windows are intentionally ignored; portable secret values are the only
-        // values restored to Android Keystore, and no private-key bytes are imported implicitly.
-        var secretCount = 0
-        for ((ref, value) in secretMap) {
-            credentials.put(value, ref)
-            secretCount++
+        val commandGroups = mutableListOf<ImportCommandGroup>()
+        val commandGroupOrder = linkedMapOf<String, Int>()
+        for (element in array("snippetGroups")) {
+            val value = element as? JsonObject
+            if (value == null) {
+                invalid++
+                continue
+            }
+            val id = text(value, "id")
+            val name = text(value, "name")
+            if (id == null || name == null || name.length > 200) { invalid++; continue }
+            commandGroups += ImportCommandGroup(id, name)
+            commandGroupOrder[id] = intOf(value, "order") ?: 0
         }
-        val commandResult = ToolPortable.import(root, tools, conflict)
-        return PortableImportResult(profileCount, groupCount, proxyCount, keyCount, forwardCount, hostCount, secretCount, skipped + commandResult.skipped, invalid + commandResult.invalid, notes, commandResult.applied)
+        val commands = mutableListOf<ImportCommand>()
+        val commandBodies = linkedMapOf<String, Pair<String, Long>>()
+        for (element in array("snippets")) {
+            val value = element as? JsonObject
+            if (value == null) {
+                invalid++
+                continue
+            }
+            val id = text(value, "id")
+            val name = text(value, "name")
+            val command = text(value, "command")
+            if (id == null || name == null || command == null || name.length > 200 || command.length > 32_768 || '\u0000' in command) {
+                invalid++; continue
+            }
+            commands += ImportCommand(id, name, text(value, "groupId"))
+            commandBodies[id] = command to (longOf(value, "updatedAt").takeIf { it > 0L } ?: System.currentTimeMillis())
+        }
+        val hosts = mutableListOf<ImportHostTrust>()
+        val hostMeta = linkedMapOf<String, Pair<String, Long>>()
+        for (element in array("knownHosts")) {
+            val value = element as? JsonObject
+            if (value == null) {
+                invalid++
+                continue
+            }
+            val key = text(value, "key")
+            val keyType = text(value, "keyType")
+            val fingerprint = text(value, "fingerprintSha256")
+            if (key == null || keyType == null || fingerprint == null) { invalid++; continue }
+            hosts += ImportHostTrust(key, fingerprint)
+            hostMeta[key] = keyType to longOf(value, "addedAt")
+        }
+        return PortableSource(
+            ImportCatalog(groups, proxies, keys, connections, forwards, commandGroups, commands, hosts, secretValues.keys),
+            profileJson, groupOrder, proxyTimes, keyTimes, commandGroupOrder, commandBodies, hostMeta,
+            secretValues, invalid, rdpSkipped, materialRefsIgnored, secretsLocked
+        )
     }
 
-    private fun clearUnavailableSecretRefs(
-        raw: JsonObject,
-        secretMap: Map<String, String>,
-        notes: MutableList<String>
-    ): JsonObject {
-        val root = raw.toMutableMap()
-        val auth = raw["auth"]?.jsonObject?.toMutableMap()
-        val authRefs = listOf("passwordRef", "passphraseRef")
-        if (auth != null) {
-            authRefs.forEach { name ->
-                val ref = auth[name]?.jsonPrimitive?.contentOrNull
-                if (ref != null && !secretMap.containsKey(ref)) {
-                    auth.remove(name)
-                    notes += "连接的 $name 未包含在导出文件中，需要重新录入"
-                }
+    private fun checkAssociations(plan: ImportPlanResult, local: LocalIndex) {
+        if (!plan.groups.all { it.action.persists() } || !plan.connections.all { it.action.persists() }) error("a skipped row was queued for write")
+        val groupIds = plan.groups.map { it.targetId }.toSet() + local.groups
+        val proxyIds = plan.proxies.map { it.targetId }.toSet() + local.proxies
+        val keyIds = plan.privateKeys.map { it.targetId }.toSet() + local.privateKeyFingerprints.keys
+        val connectionIds = plan.connections.map { it.targetId }.toSet() + local.connections
+        val commandGroupIds = plan.commandGroups.map { it.targetId }.toSet() + local.commandGroups
+        fun check(id: String?, allowed: Set<String>, label: String) {
+            if (id != null && id !in allowed) error("dangling $label $id")
+        }
+        fun expect(action: RowAction, id: String, exists: Boolean, label: String) {
+            when (action) {
+                RowAction.Insert, RowAction.Duplicate -> if (exists) error("$label $id already exists")
+                RowAction.Overwrite -> if (!exists) error("$label $id is missing")
+                else -> error("$label $id is not a write")
             }
-            root["auth"] = JsonObject(auth)
         }
-        val proxy = raw["proxy"]?.jsonObject?.toMutableMap()
-        val proxyRef = proxy?.get("passwordRef")?.jsonPrimitive?.contentOrNull
-        if (proxy != null && proxyRef != null && !secretMap.containsKey(proxyRef)) {
-            proxy.remove("passwordRef")
-            notes += "连接代理密码未包含在导出文件中，需要重新录入"
-            root["proxy"] = JsonObject(proxy)
+        plan.groups.forEach { row ->
+            expect(row.action, row.targetId, row.targetId in local.groups, "group")
+            check(row.parentId, groupIds, "group")
         }
-        return JsonObject(root)
+        plan.proxies.forEach { expect(it.action, it.targetId, it.targetId in local.proxies, "proxy") }
+        plan.privateKeys.forEach { expect(it.action, it.targetId, it.targetId in local.privateKeyFingerprints, "private key") }
+        plan.connections.forEach { row ->
+            expect(row.action, row.targetId, row.targetId in local.connections, "connection")
+            check(row.groupId, groupIds, "group")
+            check(row.proxyId, proxyIds, "proxy")
+            check(row.privateKeyId, keyIds, "private key")
+        }
+        plan.forwards.forEach { row ->
+            expect(row.action, row.targetId, row.targetId in local.forwards, "forward")
+            check(row.profileId, connectionIds, "connection")
+        }
+        plan.commandGroups.forEach { expect(it.action, it.targetId, it.targetId in local.commandGroups, "command group") }
+        plan.commands.forEach { row ->
+            expect(row.action, row.targetId, row.targetId in local.commands, "command")
+            check(row.groupId, commandGroupIds, "command group")
+        }
+        val secretLocals = plan.secrets.map { it.localRef }.toSet()
+        fun secret(ref: String?) {
+            if (ref != null && ref !in secretLocals) error("secret ref $ref was not allocated")
+        }
+        plan.proxies.forEach { secret(it.passwordRef) }
+        plan.privateKeys.forEach { secret(it.passphraseRef) }
+        plan.connections.forEach { secret(it.passwordRef); secret(it.passphraseRef); secret(it.proxyPasswordRef) }
     }
 
     private fun buildData(
@@ -498,14 +735,72 @@ object PortableExport {
             put("addedAt", host.addedAt)
         } }))
         for (key in listOf("snippets", "snippetGroups")) toolsData[key]?.let { put(key,it) }
-        settings?.let { put("settings", it) }
+        settings?.let { put("settings", withoutLocalDisplay(it)) }
     }
 
     private fun decodeSecrets(bytes: ByteArray): Map<String, String> =
         ProtocolJson.instance.decodeFromString<Map<String, String>>(bytes.toString(Charsets.UTF_8))
 
+    private fun text(obj: JsonObject, key: String): String? =
+        (obj[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && '\u0000' !in it }
+
+    private fun intOf(obj: JsonObject, key: String): Int? {
+        val value = obj[key] as? JsonPrimitive ?: return null
+        return value.intOrNull ?: value.longOrNull?.takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE.toLong() }?.toInt()
+    }
+
+    private fun longOf(obj: JsonObject, key: String): Long = (obj[key] as? JsonPrimitive)?.longOrNull ?: 0L
+
+    private fun putOptional(target: MutableMap<String, JsonElement>, key: String, value: String?) {
+        if (value == null) target.remove(key) else target[key] = JsonPrimitive(value)
+    }
+
     private fun requireSecretPassphrase(passphrase: CharArray?, values: Map<String, String>): CharArray =
         passphrase ?: error("a passphrase is required when exporting secrets (${values.size} values)")
+
+    internal fun rewriteImportedProfile(
+        raw: JsonObject,
+        planned: PlannedConnection,
+        connectionIds: Map<String, String>,
+        catalogConnectionIds: Set<String>
+    ): JsonObject {
+        val root = raw.toMutableMap()
+        root["id"] = JsonPrimitive(planned.targetId)
+        putOptional(root, "groupId", planned.groupId)
+        putOptional(root, "proxyId", planned.proxyId)
+        val auth = (raw["auth"] as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+        putOptional(auth, "privateKeyId", planned.privateKeyId)
+        putOptional(auth, "passwordRef", planned.passwordRef)
+        putOptional(auth, "passphraseRef", planned.passphraseRef)
+        root["auth"] = JsonObject(auth)
+        val proxy = (raw["proxy"] as? JsonObject)?.toMutableMap()
+        if (proxy != null) {
+            putOptional(proxy, "passwordRef", planned.proxyPasswordRef)
+            root["proxy"] = JsonObject(proxy)
+        }
+        val jump = (raw["jumpHostId"] as? JsonPrimitive)?.contentOrNull
+        if (jump != null) {
+            val mapped = connectionIds[jump]
+            when {
+                mapped != null -> root["jumpHostId"] = JsonPrimitive(mapped)
+                jump in catalogConnectionIds -> root.remove("jumpHostId")
+            }
+        }
+        return JsonObject(root)
+    }
+
+    /** Keeps Keystore material only when the fingerprints matched. Never a signal to delete it. */
+    internal fun retainedMaterialRef(existing: String?, keepExistingMaterial: Boolean): String? =
+        if (keepExistingMaterial) existing else null
+
+    /** Inserts use the original host key. Skip, block and every other action write nothing. */
+    internal fun hostTrustStorageKey(decision: HostTrustDecision): String? =
+        if (decision.action == RowAction.Insert) decision.key else null
+
+    internal fun withoutLocalDisplay(settings: JsonObject): JsonObject {
+        val local = setOf("sessionConnectionWidthDp", "sessionMonitorWidthDp", "sessionFileHeightDp")
+        return JsonObject(settings.filterKeys { it !in local })
+    }
 }
 
 enum class ImportConflict { SKIP, OVERWRITE, DUPLICATE }

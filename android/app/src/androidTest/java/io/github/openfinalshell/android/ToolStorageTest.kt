@@ -16,7 +16,7 @@ class ToolStorageTest {
     @Test fun migrationPreservesExistingDocumentsAndValidatesRoomSchema() = runBlocking {
         val name = "migration-${UUID.randomUUID()}.db"
         fun open() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(AppDatabase.MIGRATION_3_4).build()
+            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5).build()
         try {
             open().let { database ->
                 database.documents().upsert(DocumentEntity("sentinel", "unchanged")); database.close()
@@ -32,7 +32,7 @@ class ToolStorageTest {
                     assertEquals("unchanged", database.documents().find("sentinel")?.json)
                     database.tools().save(CommandGroupEntity("g","group"))
                     assertEquals("group",database.tools().groups().single().name)
-                    assertEquals(4,database.openHelper.writableDatabase.version)
+                    assertEquals(5,database.openHelper.writableDatabase.version)
                 } finally { database.close() }
             }
         } finally { context.deleteDatabase(name) }

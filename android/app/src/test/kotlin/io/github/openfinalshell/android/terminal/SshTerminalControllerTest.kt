@@ -141,6 +141,26 @@ class SshTerminalControllerTest {
     }
 
     @Test
+    fun `disconnect keeps the buffer and a new sink receives the next input`() = runBlocking {
+        val first = mutableListOf<ByteArray>()
+        val second = mutableListOf<ByteArray>()
+        val controller = SshTerminalController(scope, { first += it }, initialCols = 20, initialRows = 4)
+        controller.write("old prompt".toByteArray())
+
+        controller.setInputEnabled(false)
+        controller.sendInput("ls\n".toByteArray())
+        controller.replaceInputSink { second += it }
+        controller.setInputEnabled(true)
+        controller.appendLocalMarker("restored")
+        controller.sendInput("pwd\n".toByteArray())
+
+        assertTrue(first.isEmpty())
+        assertEquals("pwd\n", second.single().toString(Charsets.UTF_8))
+        assertTrue(controller.transcriptText().contains("old prompt"))
+        assertTrue(controller.transcriptText().contains("restored"))
+    }
+
+    @Test
     fun `applies configured font size and cursor style to the emulator`() {
         val controller = SshTerminalController(scope, {})
 

@@ -7,6 +7,7 @@ import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import io.github.openfinalshell.android.core.terminal.TerminalCursorStyle
 import io.github.openfinalshell.android.core.terminal.TerminalSnapshot
+import io.github.openfinalshell.android.core.termops.ScrollbackLimits
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,28 +23,56 @@ import kotlinx.coroutines.sync.withLock
  */
 class SshTerminalController(
     private val inputScope: CoroutineScope,
-    private val inputSink: suspend (ByteArray) -> Unit,
+    inputSink: suspend (ByteArray) -> Unit,
     initialCols: Int = DEFAULT_COLUMNS,
     initialRows: Int = DEFAULT_ROWS,
     scrollbackLines: Int = DEFAULT_SCROLLBACK
 ) : TerminalHostController, TerminalSessionClient {
     @Volatile private var closed = false
+    /** Independent of [closed]: a dropped link keeps the buffer readable and refuses input. */
+    @Volatile private var inputEnabled = true
+    @Volatile private var inputSink: suspend (ByteArray) -> Unit = inputSink
+
+    fun setInputEnabled(enabled: Boolean) {
+        inputEnabled = enabled
+    }
+
+    /** Points terminal replies and user input at the shell opened after a reconnect. */
+    fun replaceInputSink(sink: suspend (ByteArray) -> Unit) {
+        inputSink = sink
+    }
+
+    /** One local status line in the existing emulator. It is not written to the remote shell. */
+    fun appendLocalMarker(text: String) {
+        if (closed || text.isEmpty()) return
+        val bytes = "\r\n$text".toByteArray(Charsets.UTF_8)
+        synchronized(emulator) {
+            emulator.append(bytes, bytes.size)
+            publishSnapshot()
+        }
+    }
     @Volatile private var title: String? = null
     @Volatile private var fontSizeSp = DEFAULT_FONT_SIZE
     @Volatile private var cursorStyle = TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE
     private var initialized = false
     private var renderRevision = 0L
     private val inputMutex = Mutex()
+    private val bracketedPasteTracker = DecSet2004Tracker()
+
+    fun bracketedPasteEnabled(): Boolean = TerminalModes.bracketedPaste(emulator, bracketedPasteTracker)
+
+    /** False while the channel is closed or the link has dropped and input is refused. */
+    fun canAcceptInput(): Boolean = !closed && inputEnabled
 
     private val terminalOutput = object : TerminalOutput() {
         override fun write(data: ByteArray, offset: Int, count: Int) {
-            if (closed || count <= 0) return
+            if (closed || !inputEnabled || count <= 0) return
             val response = data.copyOfRange(offset, offset + count)
             // Terminal replies (DA/DSR, OSC queries, etc.) must retain byte order relative to
             // user input. A single mutex also prevents a reply from racing session shutdown.
             inputScope.launch {
                 inputMutex.withLock {
-                    if (!closed) inputSink(response)
+                    if (!closed && inputEnabled) inputSink(response)
                 }
             }
         }
@@ -66,10 +95,7 @@ class SshTerminalController(
         terminalOutput,
         initialCols.coerceAtLeast(MIN_COLUMNS),
         initialRows.coerceAtLeast(MIN_ROWS),
-        scrollbackLines.coerceIn(
-            TerminalEmulator.TERMINAL_TRANSCRIPT_ROWS_MIN,
-            TerminalEmulator.TERMINAL_TRANSCRIPT_ROWS_MAX
-        ),
+        ScrollbackLimits.forEmulator(scrollbackLines),
         this
     )
 
@@ -82,6 +108,7 @@ class SshTerminalController(
 
     override fun write(data: ByteArray) {
         if (closed || data.isEmpty()) return
+        bracketedPasteTracker.observe(data)
         synchronized(emulator) {
             emulator.append(data, data.size)
             publishSnapshot()
@@ -91,7 +118,7 @@ class SshTerminalController(
     override suspend fun sendInput(data: ByteArray) {
         if (data.isEmpty()) return
         inputMutex.withLock {
-            if (!closed) inputSink(data)
+            if (!closed && inputEnabled) inputSink(data)
         }
     }
 

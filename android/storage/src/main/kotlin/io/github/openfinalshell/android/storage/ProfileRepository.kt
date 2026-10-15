@@ -1,5 +1,6 @@
 package io.github.openfinalshell.android.storage
 
+import io.github.openfinalshell.android.core.connection.ProfileJsonMerge
 import io.github.openfinalshell.android.core.model.ConnectionAuth
 import io.github.openfinalshell.android.core.model.ConnectionProfile
 import io.github.openfinalshell.android.core.model.ConnectionProxy
@@ -47,9 +48,34 @@ class ProfileRepository(private val dao: ProfileDao) {
                 jumpHostId = profile.jumpHostId,
                 note = profile.note,
                 createdAt = existing?.createdAt?.takeIf { it > 0 } ?: now,
-                updatedAt = now
+                updatedAt = now,
+                lastUsedAt = profile.lastUsedAt
             )
         )
+    }
+
+    /**
+     * Writes [profile] while keeping JSON fields the Android model does not edit.
+     * [sourceIdForJson] selects the record whose raw payload is the merge base. A duplicate uses
+     * the source id here and a new id on [profile].
+     */
+    suspend fun savePreserving(sourceIdForJson: String?, profile: ConnectionProfile): ConnectionProfile {
+        val existingJson = sourceIdForJson?.let { dao.find(it)?.profileJson }?.let(ProfileJsonMerge::parse)
+        val merged = ProfileJsonMerge.merge(existingJson, profile)
+        return upsertImported(merged, profile.id)
+    }
+
+    /** Updates the column and the serialized profile together. Failures must not call this. */
+    suspend fun touchLastUsed(id: String, at: Long = System.currentTimeMillis()) {
+        val entity = dao.find(id) ?: return
+        val json = ProfileJsonMerge.parse(entity.profileJson)?.toMutableMap()
+        val profileJson = if (json == null) {
+            entity.profileJson
+        } else {
+            json["lastUsedAt"] = JsonPrimitive(at)
+            JsonObject(json).toString()
+        }
+        dao.upsert(entity.copy(profileJson = profileJson, lastUsedAt = at))
     }
 
     /** Preserve unknown desktop fields while importing a profile into the reduced Android model. */

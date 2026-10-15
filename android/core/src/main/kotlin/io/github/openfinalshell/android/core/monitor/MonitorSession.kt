@@ -44,6 +44,14 @@ data class MonitorState(
     val directLatencyMs: Long? = null,
     val connectionLatencyMs: Long? = null,
     val available: MonitorAvailability = MonitorAvailability(),
+    /**
+     * Sections whose current snapshot values are real parses, including values carried forward
+     * from an earlier tick that did not repeat the section. A failed parse is absent here.
+     * Callers must not draw a placeholder zero for a section that is not held.
+     */
+    val held: Set<String> = emptySet(),
+    /** `ss` counters cannot be read. Distinct from an empty, successful port list. */
+    val portCountersUnavailable: Boolean = false,
     val error: String? = null
 )
 
@@ -82,6 +90,15 @@ class MonitorSession(
 
     private fun source(sessionId: String): MonitorFrameSource =
         frameSourceFor(sessionId) ?: LinuxMonitorFrameSource
+
+    /** Records what this session's frame source can answer, once that source exists. */
+    fun noteSource(sessionId: String) {
+        val resolved = frameSourceFor(sessionId) ?: return
+        val next = resolved.availability
+        if (mutableState.value.available != next) {
+            mutableState.value = mutableState.value.copy(available = next)
+        }
+    }
 
     private fun deltaFor(sessionId: String): MonitorDelta = deltas.getOrPut(sessionId) { MonitorDelta() }
 
@@ -158,15 +175,29 @@ class MonitorSession(
         val frameSource = source(sessionId)
         val seq = ++deltaFor(sessionId).sequence
         val command = frameSource.portTraffic(seq) ?: run {
-            mutableState.value = mutableState.value.copy(ports = null, available = frameSource.availability)
+            mutableState.value = mutableState.value.copy(
+                ports = null,
+                portCountersUnavailable = true,
+                available = frameSource.availability
+            )
             return null
         }
         val raw = execute(sessionId, command, seq).raw
-        val body = MonitorFrameParser.extractFrame(raw, seq) ?: return null
+        val body = MonitorFrameParser.extractFrame(raw, seq) ?: run {
+            mutableState.value = mutableState.value.copy(ports = null, portCountersUnavailable = true)
+            return null
+        }
         val sections = MonitorFrameParser.splitSections(body)
-        val parsed = PortTrafficParser.parse(sections["PORTS"].orEmpty()) ?: return null
+        val parsed = PortTrafficParser.parse(sections["PORTS"].orEmpty()) ?: run {
+            mutableState.value = mutableState.value.copy(ports = null, portCountersUnavailable = true)
+            return null
+        }
         val snapshot = portRates.apply(parsed)
-        mutableState.value = mutableState.value.copy(ports = snapshot)
+        mutableState.value = mutableState.value.copy(
+            ports = snapshot,
+            portCountersUnavailable = false,
+            available = frameSource.availability
+        )
         return snapshot
     }
 
@@ -195,50 +226,140 @@ class MonitorSession(
         val sections = MonitorFrameParser.splitSections(body)
         val delta = deltaFor(sessionId)
         val now = System.currentTimeMillis()
-        val parsedCpu = LinuxMonitorParser.parseCpu(sections["STAT"].orEmpty())
-        val usage = parsedCpu?.first?.let { current -> delta.cpu?.let { LinuxMonitorParser.usage(it, current) } ?: 0.0 } ?: 0.0
-        val perCore = parsedCpu?.second?.mapIndexed { index, current -> delta.cores.getOrNull(index)?.let { LinuxMonitorParser.usage(it, current) } ?: 0.0 }.orEmpty()
-        delta.cpu = parsedCpu?.first
-        delta.cores = parsedCpu?.second.orEmpty()
-        val netCounters = LinuxMonitorParser.parseNetDev(sections["NET"].orEmpty())
+        val previous = mutableState.value.snapshot
+        val held = mutableState.value.held.toMutableSet()
         val elapsed = delta.lastSampleAtMs?.let { (now - it).coerceAtLeast(1L).toDouble() / 1000.0 }
         delta.lastSampleAtMs = now
-        val net = netCounters.map { item ->
-            val old = delta.net[item.iface]
-            val rx = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.first, item.rxTotalBytes, elapsed) else 0L
-            val tx = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.second, item.txTotalBytes, elapsed) else 0L
-            NetworkSnapshot(item.iface, rx, tx, item.rxTotalBytes, item.txTotalBytes)
+
+        var usage = previous?.cpu?.usagePct ?: 0.0
+        var perCore = previous?.cpu?.perCore.orEmpty()
+        if ("STAT" in sections) {
+            val parsedCpu = LinuxMonitorParser.parseCpu(sections.getValue("STAT"))
+            if (parsedCpu == null) {
+                held -= "STAT"
+            } else {
+                val (all, cores) = parsedCpu
+                usage = delta.cpu?.let { LinuxMonitorParser.usage(it, all) } ?: 0.0
+                perCore = cores.mapIndexed { index, current ->
+                    delta.cores.getOrNull(index)?.let { LinuxMonitorParser.usage(it, current) } ?: 0.0
+                }
+                delta.cpu = all
+                delta.cores = cores
+                held += "STAT"
+            }
         }
-        delta.net = netCounters.associate { it.iface to (it.rxTotalBytes to it.txTotalBytes) }
-        val diskCounters = LinuxMonitorParser.parseDiskstats(sections["DISKIO"].orEmpty())
-        val diskIo = diskCounters.map { item ->
-            val old = delta.disk[item.dev]
-            val read = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.first * 512, item.readSectors * 512, elapsed) else 0L
-            val write = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.second * 512, item.writeSectors * 512, elapsed) else 0L
-            DiskIoSnapshot(item.dev, read, write)
+
+        var load = previous?.cpu?.loadAvg.orEmpty()
+        if ("LOAD" in sections) {
+            val parts = sections.getValue("LOAD").trim().split(Regex("\\s+")).mapNotNull { it.toDoubleOrNull() }.take(3)
+            if (parts.isEmpty()) {
+                held -= "LOAD"
+            } else {
+                load = parts
+                held += "LOAD"
+            }
         }
-        delta.disk = diskCounters.associate { it.dev to (it.readSectors to it.writeSectors) }
-        val mem = LinuxMonitorParser.parseMeminfo(sections["MEM"].orEmpty()) ?: MemorySnapshot(0, 0, 0, 0, 0)
-        val load = LinuxMonitorParser.parseLoadAvg(sections["LOAD"].orEmpty())
-        val fs = LinuxMonitorParser.parseDf(sections["DF"].orEmpty()).map { DiskFsSnapshot(it.fs, it.mount, it.totalKb, it.usedKb, it.usePct) }
-        val procs = sections["PS"]?.let { text ->
-            (if (text.lineSequence().firstOrNull()?.contains("PID") == true) LinuxMonitorParser.parsePsTop(text) else LinuxMonitorParser.parsePsAux(text)).map { ProcessSnapshot(it.pid, it.name, it.cpuPct, it.memPct) }
+
+        var uptime = previous?.uptimeSec ?: 0.0
+        if ("UPTIME" in sections) {
+            val value = sections.getValue("UPTIME").trim().split(Regex("\\s+")).firstOrNull()?.toDoubleOrNull()
+            if (value == null) {
+                held -= "UPTIME"
+            } else {
+                uptime = value
+                held += "UPTIME"
+            }
         }
+
+        var mem = previous?.mem ?: UNREAD_MEMORY
+        if ("MEM" in sections) {
+            val parsed = LinuxMonitorParser.parseMeminfo(sections.getValue("MEM"))
+            if (parsed == null) {
+                held -= "MEM"
+            } else {
+                mem = parsed
+                held += "MEM"
+            }
+        }
+
+        var net = previous?.net.orEmpty()
+        if ("NET" in sections) {
+            val counters = LinuxMonitorParser.parseNetDev(sections.getValue("NET"))
+            net = counters.map { item ->
+                val old = delta.net[item.iface]
+                val rx = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.first, item.rxTotalBytes, elapsed) else 0L
+                val tx = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.second, item.txTotalBytes, elapsed) else 0L
+                NetworkSnapshot(item.iface, rx, tx, item.rxTotalBytes, item.txTotalBytes)
+            }
+            delta.net = counters.associate { it.iface to (it.rxTotalBytes to it.txTotalBytes) }
+            held += "NET"
+        }
+
+        var diskIo = previous?.diskIo.orEmpty()
+        if ("DISKIO" in sections) {
+            val counters = LinuxMonitorParser.parseDiskstats(sections.getValue("DISKIO"))
+            diskIo = counters.map { item ->
+                val old = delta.disk[item.dev]
+                val read = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.first * 512, item.readSectors * 512, elapsed) else 0L
+                val write = if (elapsed != null && old != null) LinuxMonitorParser.diffRate(old.second * 512, item.writeSectors * 512, elapsed) else 0L
+                DiskIoSnapshot(item.dev, read, write)
+            }
+            delta.disk = counters.associate { it.dev to (it.readSectors to it.writeSectors) }
+            held += "DISKIO"
+        }
+
+        var diskFs = previous?.diskFs
+        if ("DF" in sections) {
+            val parsed = LinuxMonitorParser.parseDf(sections.getValue("DF"))
+                .map { DiskFsSnapshot(it.fs, it.mount, it.totalKb, it.usedKb, it.usePct) }
+            diskFs = parsed.takeIf { it.isNotEmpty() }
+            if (diskFs == null) held -= "DF" else held += "DF"
+        }
+
+        var procs = previous?.topProcs
+        if ("PS" in sections) {
+            val text = sections.getValue("PS")
+            procs = (if (text.lineSequence().firstOrNull()?.contains("PID") == true) {
+                LinuxMonitorParser.parsePsTop(text)
+            } else {
+                LinuxMonitorParser.parsePsAux(text)
+            }).map { ProcessSnapshot(it.pid, it.name, it.cpuPct, it.memPct) }
+            held += "PS"
+        }
+
+        var conns = previous?.conns
+        if ("SOCK" in sections) {
+            conns = LinuxMonitorParser.parseSockstat(sections.getValue("SOCK"))
+            if (conns == null) held -= "SOCK" else held += "SOCK"
+        }
+
+        var tcp = previous?.tcpStates
+        if ("TCPST" in sections) {
+            tcp = LinuxMonitorParser.parseTcpStates(sections.getValue("TCPST")).takeIf { it.isNotEmpty() }
+            if (tcp == null) held -= "TCPST" else held += "TCPST"
+        }
+
         val snapshot = MonitorSnapshot(
             ts = now,
-            uptimeSec = LinuxMonitorParser.parseUptime(sections["UPTIME"].orEmpty()),
+            uptimeSec = uptime,
             cpu = CpuSnapshot(usage, perCore, load),
             mem = mem,
             net = net,
-            diskFs = fs.takeIf { it.isNotEmpty() },
+            diskFs = diskFs,
             diskIo = diskIo,
             topProcs = procs,
-            conns = LinuxMonitorParser.parseSockstat(sections["SOCK"].orEmpty()),
-            tcpStates = LinuxMonitorParser.parseTcpStates(sections["TCPST"].orEmpty()).takeIf { it.isNotEmpty() },
+            conns = conns,
+            tcpStates = tcp,
             directLatencyMs = mutableState.value.directLatencyMs,
             connectionLatencyMs = connectionLatencyOverrideMs ?: (System.nanoTime() - startedAtNanos) / 1_000_000
         )
-        mutableState.value = mutableState.value.copy(snapshot = snapshot, connectionLatencyMs = snapshot.connectionLatencyMs, error = if (sections.isEmpty()) "empty monitor frame" else null)
+        mutableState.value = mutableState.value.copy(
+            snapshot = snapshot,
+            held = held,
+            connectionLatencyMs = snapshot.connectionLatencyMs,
+            error = if (sections.isEmpty()) "empty monitor frame" else null,
+            available = frameSourceFor(sessionId)?.availability ?: mutableState.value.available
+        )
     }
 
     fun applyDirectLatency(valueMs: Long?) {
@@ -271,7 +392,15 @@ class MonitorSession(
         ExecutionResult(result, beginAt, beginAt?.let { (it - started) / 1_000_000 })
     }
 
-    private companion object { const val RECONNECT_POLL_MS = 1_000L }
+    private companion object {
+        const val RECONNECT_POLL_MS = 1_000L
+
+        /**
+         * Placeholder for [MonitorSnapshot.mem], which cannot be null. A failed or absent parse
+         * leaves MEM out of [MonitorState.held], so the UI must not draw these zeros.
+         */
+        val UNREAD_MEMORY = MemorySnapshot(0, 0, 0, 0, 0)
+    }
 }
 
 internal data class MonitorLoopFailure(val running: Boolean, val error: String?)

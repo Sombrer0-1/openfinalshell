@@ -48,14 +48,19 @@ enum class StatusKey(@StringRes val resourceId: Int) {
     FORWARDING_RULE_SAVE_FAILED(R.string.status_forwarding_rule_save_failed),
     FORWARDING_RULE_DELETE_FAILED(R.string.status_forwarding_rule_delete_failed),
     FORWARDING_START_FAILED(R.string.status_forwarding_start_failed),
+    FORWARDING_REQUIRES_SSH(R.string.status_forwarding_requires_ssh),
     PROFILE_SAVE_FAILED(R.string.status_profile_save_failed),
     PROFILE_DELETE_FAILED(R.string.status_profile_delete_failed),
     GROUP_SAVE_FAILED(R.string.status_group_save_failed),
     GROUP_DELETE_FAILED(R.string.status_group_delete_failed),
     PROXY_SAVE_FAILED(R.string.status_proxy_save_failed),
     PROXY_DELETE_FAILED(R.string.status_proxy_delete_failed),
+    PROXY_IN_USE(R.string.status_proxy_in_use),
     PRIVATE_KEY_IMPORT_FAILED(R.string.status_private_key_import_failed),
     PRIVATE_KEY_DELETE_FAILED(R.string.status_private_key_delete_failed),
+    PRIVATE_KEY_IN_USE(R.string.status_private_key_in_use),
+    QUICK_CONNECT_INVALID(R.string.status_quick_connect_invalid),
+    GROUP_PARENT_INVALID(R.string.status_group_parent_invalid),
     HOST_TRUST_REVOKE_FAILED(R.string.status_host_trust_revoke_failed),
     EXPORT_FAILED(R.string.status_export_failed),
     IMPORT_FAILED(R.string.status_import_failed),
@@ -78,7 +83,12 @@ enum class StatusKey(@StringRes val resourceId: Int) {
     SYNC_INCOMING_CONFIRMATION_PENDING(R.string.status_sync_incoming_confirmation_pending),
     SYNC_REJECTED(R.string.status_sync_rejected),
     SYNC_IMPORT_FAILED(R.string.status_sync_import_failed),
-    SYNC_IMPORTED(R.string.status_sync_imported)
+    SYNC_IMPORTED(R.string.status_sync_imported),
+    FILE_CD_KEPT(R.string.file_cd_kept),
+    FILE_CD_LIST_FAILED(R.string.file_cd_list_failed),
+    FILE_CD_FOLLOWED(R.string.file_cd_followed),
+    FILE_TYPE_CONFLICT(R.string.file_type_conflict),
+    FILE_PERMISSIONS_UPDATED(R.string.file_permissions_updated)
 }
 
 data class UiStatus(

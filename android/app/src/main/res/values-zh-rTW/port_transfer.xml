@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">編輯器編碼：%1$s</string>
     <string name="port_encoding_unavailable">此裝置不支援此編碼。</string>
     <string name="port_encoding_lossless">所選編碼無法無損表示檔案或輸入文字。請選擇正確編碼並重新開啟，未儲存任何變更。</string>
+    <string name="port_editor_binary">此檔案是二進位檔案，無法在文字編輯器中開啟。</string>
     <string name="port_eol_mixed">保留原有混合行尾，新插入行保留輸入時的行尾。</string>
 </resources>

@@ -119,16 +119,7 @@ internal class MinaExecChannel(private val channel: ClientChannel) : ExecChannel
 
 internal class MinaSftpChannel(private val client: SftpClient) : SftpChannel {
     override suspend fun list(path: String): List<SftpEntry> = withContext(Dispatchers.IO) {
-        client.readDir(path).map { entry ->
-            val attrs = entry.attributes
-            val type = when {
-                attrs.isDirectory -> SftpEntry.Type.DIRECTORY
-                attrs.isRegularFile -> SftpEntry.Type.FILE
-                attrs.isSymbolicLink -> SftpEntry.Type.SYMLINK
-                else -> SftpEntry.Type.OTHER
-            }
-            SftpEntry(entry.filename, path.trimEnd('/') + "/" + entry.filename, type, attrs.size, attrs.permissions)
-        }.toList()
+        readDirectory(path)
     }
 
     override suspend fun read(path: String): ByteArray = withContext(Dispatchers.IO) {
@@ -162,8 +153,32 @@ internal class MinaSftpChannel(private val client: SftpClient) : SftpChannel {
         }
     }
 
+    override suspend fun createExclusive(path: String, data: ByteArray) = withContext(Dispatchers.IO) {
+        val modes = EnumSet.of(SftpClient.OpenMode.Write, SftpClient.OpenMode.Create, SftpClient.OpenMode.Exclusive)
+        client.openRemoteFileChannel(path, modes).use { channel ->
+            val buffer = ByteBuffer.wrap(data)
+            while (buffer.hasRemaining()) channel.write(buffer)
+        }
+        Unit
+    }
+
+    override suspend fun realpath(path: String): String = withContext(Dispatchers.IO) {
+        client.canonicalPath(path)
+    }
+
+    override suspend fun lstat(path: String): SftpEntry? = withContext(Dispatchers.IO) {
+        try {
+            val name = path.trimEnd('/').substringAfterLast('/').ifEmpty { path }
+            entryOf(name, path, client.lstat(path))
+        } catch (error: org.apache.sshd.sftp.common.SftpException) {
+            val missing = error.status == org.apache.sshd.sftp.common.SftpConstants.SSH_FX_NO_SUCH_FILE ||
+                error.status == org.apache.sshd.sftp.common.SftpConstants.SSH_FX_NO_SUCH_PATH
+            if (missing) null else throw error
+        }
+    }
+
     override suspend fun permissions(path: String, mode: Int) = withContext(Dispatchers.IO) {
-        client.setStat(path, SftpClient.Attributes().perms(mode))
+        client.setStat(path, SftpClient.Attributes().perms(mode and 0xFFF))
     }
 
     override suspend fun writeChunk(path: String, data: ByteArray, offset: Long, truncate: Boolean) = withContext(Dispatchers.IO) {
@@ -189,6 +204,44 @@ internal class MinaSftpChannel(private val client: SftpClient) : SftpChannel {
 
     override suspend fun close() = withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { client.close() }
 
+    private fun readDirectory(path: String): List<SftpEntry> {
+        val strict = client as? StrictNameSftpClient
+        strict?.beginListing()
+        val raw = try {
+            client.readDir(path).toList()
+        } catch (error: Throwable) {
+            strict?.finishListing(-1)
+            throw error
+        }
+        val flags = strict?.finishListing(raw.size) ?: List(raw.size) { false }
+        return raw.mapIndexed { index, entry ->
+            val invalid = flags[index]
+            val name = if (invalid) "" else entry.filename
+            val child = if (invalid) "" else path.trimEnd('/') + "/" + name
+            entryOf(name, child, entry.attributes, invalid)
+        }
+    }
+
+    private fun entryOf(name: String, path: String, attrs: SftpClient.Attributes, nameInvalid: Boolean = false): SftpEntry {
+        val type = when {
+            attrs.isDirectory -> SftpEntry.Type.DIRECTORY
+            attrs.isRegularFile -> SftpEntry.Type.FILE
+            attrs.isSymbolicLink -> SftpEntry.Type.SYMLINK
+            else -> SftpEntry.Type.OTHER
+        }
+        return SftpEntry(
+            name = name,
+            path = path,
+            type = type,
+            size = attrs.size,
+            permissions = attrs.permissions,
+            owner = attrs.owner?.takeIf { it.isNotEmpty() },
+            group = attrs.group?.takeIf { it.isNotEmpty() },
+            modifiedAtMillis = attrs.modifyTime?.toMillis(),
+            nameInvalid = nameInvalid,
+        )
+    }
+
     private fun removeRecursively(path: String) {
         // Cleanup must never traverse a symlink, even if a server replaces a temp entry.
         val attrs = client.lstat(path)
@@ -196,10 +249,12 @@ internal class MinaSftpChannel(private val client: SftpClient) : SftpChannel {
             client.remove(path)
             return
         }
-        client.readDir(path).forEach { entry ->
-            if (entry.filename != "." && entry.filename != "..") {
-                removeRecursively(path.trimEnd('/') + "/" + entry.filename)
+        readDirectory(path).forEach { entry ->
+            if (entry.name == "." || entry.name == "..") return@forEach
+            if (entry.nameInvalid || entry.path.isEmpty()) {
+                throw java.io.IOException("remote name is not strict UTF-8")
             }
+            removeRecursively(entry.path)
         }
         client.rmdir(path)
     }

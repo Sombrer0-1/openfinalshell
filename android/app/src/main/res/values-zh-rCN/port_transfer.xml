@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">编辑器编码：%1$s</string>
     <string name="port_encoding_unavailable">此设备不支持该编码。</string>
     <string name="port_encoding_lossless">所选编码无法无损表示文件或输入文本。请选择正确编码并重新打开文件，未保存任何修改。</string>
+    <string name="port_editor_binary">该文件是二进制文件，无法在文本编辑器中打开。</string>
     <string name="port_eol_mixed">保留原有混合行尾，新插入行保留输入时的行尾。</string>
 </resources>

@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">Кодировка редактора: %1$s</string>
     <string name="port_encoding_unavailable">Эта кодировка недоступна на устройстве.</string>
     <string name="port_encoding_lossless">Выбранная кодировка не позволяет сохранить текст без потерь. Выберите верную кодировку и откройте файл заново. Изменения не сохранены.</string>
+    <string name="port_editor_binary">Этот файл двоичный и не может быть открыт в текстовом редакторе.</string>
     <string name="port_eol_mixed">Смешанные окончания строк сохраняются. Новые строки сохраняют введённые окончания.</string>
 </resources>

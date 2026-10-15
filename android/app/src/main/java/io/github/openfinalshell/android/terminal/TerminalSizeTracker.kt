@@ -54,6 +54,21 @@ internal class TerminalSizeTracker {
         return desired.takeIf { it != applied }
     }
 
+    /** Size the next shell should open with. Survives [prepareRebind]. */
+    @Synchronized
+    fun desiredSize(): Size = desired
+
+    /**
+     * An unexpected disconnect leaves the phase at OPEN, so the next [beginOpen] would return null
+     * and the reconnected shell would never start. Return to IDLE without forgetting the measured
+     * viewport.
+     */
+    @Synchronized
+    fun prepareRebind() {
+        phase = Phase.IDLE
+        applied = null
+    }
+
     @Synchronized
     fun failOpen() {
         if (phase == Phase.OPENING) {

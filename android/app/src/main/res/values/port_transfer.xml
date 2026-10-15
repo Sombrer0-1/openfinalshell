@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">Editor encoding: %1$s</string>
     <string name="port_encoding_unavailable">This encoding is unavailable on this device.</string>
     <string name="port_encoding_lossless">This file or text cannot be represented without loss in the selected encoding. Select the correct encoding and reopen the file; nothing was saved.</string>
+    <string name="port_editor_binary">This file is binary and cannot be opened in the text editor.</string>
     <string name="port_eol_mixed">Mixed line endings are preserved. Newly inserted lines retain their entered endings.</string>
 </resources>

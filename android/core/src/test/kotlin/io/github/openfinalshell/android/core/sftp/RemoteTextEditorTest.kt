@@ -1,5 +1,7 @@
 package io.github.openfinalshell.android.core.sftp
 
+import io.github.openfinalshell.android.core.filesync.AcknowledgedRemote
+import io.github.openfinalshell.android.core.filesync.SaveRelease
 import io.github.openfinalshell.android.core.ssh.*
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -85,9 +87,16 @@ class RemoteTextEditorTest {
     private class Files : SftpChannel {
         val files = mutableMapOf("/test" to "original".toByteArray())
         var atomic = true
+        var writes = 0
+        var retarget = false
         override suspend fun list(path: String) = files.map { (name, bytes) -> SftpEntry(name.substringAfterLast('/'), name, SftpEntry.Type.FILE, bytes.size.toLong(), 420) }
         override suspend fun read(path: String) = files.getValue(path)
-        override suspend fun write(path: String, data: ByteArray) { files[path] = data }
+        override suspend fun write(path: String, data: ByteArray) { writes++; files[path] = data }
+        override suspend fun createExclusive(path: String, data: ByteArray) {
+            if (files.containsKey(path)) throw java.nio.file.FileAlreadyExistsException(path)
+            files[path] = data
+        }
+        override suspend fun realpath(path: String) = if (retarget && path == "/test") "/other/test" else path
         override suspend fun permissions(path: String, mode: Int) { assertEquals(420, mode) }
         override suspend fun atomicReplace(from: String, to: String) { if (!atomic) throw AtomicReplaceUnavailable(); files[to] = files.remove(from)!! }
         override suspend fun delete(path: String, recursive: Boolean) { files.remove(path) }
@@ -115,10 +124,67 @@ class RemoteTextEditorTest {
         assertEquals("mine", files.read("/test").toString(Charsets.UTF_8))
     }
 
+    @Test fun createExclusiveWritesOnceAndRefusesAnExistingPath() = runTest {
+        val files = Files()
+        val created = RemoteTextEditor.create(files, "/new", "hello\n")
+        assertEquals("hello\n", created.text)
+        assertEquals("hello\n", files.read("/new").toString(Charsets.UTF_8))
+        assertEquals(0, files.writes)
+        assertFalse(files.files.keys.any { it.contains(".ofs-edit-") })
+        try { RemoteTextEditor.create(files, "/test", "nope"); fail("existing target must not be overwritten") }
+        catch (_: java.nio.file.FileAlreadyExistsException) { }
+        assertEquals("original", files.read("/test").toString(Charsets.UTF_8))
+        RemoteTextEditor.create(files, "/empty", "")
+        assertEquals(0, files.read("/empty").size)
+    }
+
+    @Test fun overwriteConfirmationDoesNotAllowShrinkOrAStaleFingerprint() = runTest {
+        val files = Files().apply { this.files["/test"] = "y".repeat(4096).toByteArray() }
+        val original = RemoteTextEditor.load(files, "/test")
+        files.write("/test", "z".repeat(4096).toByteArray())
+        val seen = RemoteTextEditor.load(files, "/test")
+        files.writes = 0
+        val stale = SaveRelease(true, true, false, AcknowledgedRemote.Content(original.fingerprint))
+        try { RemoteTextEditor.save(files, original, "", release = stale); fail("stale overwrite must not apply") }
+        catch (_: RemoteTextConflict) { }
+        val current = SaveRelease(true, true, false, AcknowledgedRemote.Content(seen.fingerprint))
+        try { RemoteTextEditor.save(files, original, "", release = current); fail("shrink still needs its own confirmation") }
+        catch (_: RemoteTextShrink) { }
+        assertEquals("z".repeat(4096), files.read("/test").toString(Charsets.UTF_8))
+        assertEquals(0, files.writes)
+        RemoteTextEditor.save(files, original, "", release = current.copy(allowShrink = true, allowNonAtomic = true))
+        assertEquals("", files.read("/test").toString(Charsets.UTF_8))
+    }
+
+    @Test fun shrinkConfirmationDoesNotSkipAContentConflict() = runTest {
+        val files = Files()
+        val original = RemoteTextEditor.load(files, "/test")
+        files.write("/test", "external".toByteArray())
+        files.writes = 0
+        try {
+            RemoteTextEditor.save(files, original, "", release = SaveRelease(false, true, true))
+            fail("shrink release must not cover a content conflict")
+        } catch (_: RemoteTextConflict) { }
+        assertEquals("external", files.read("/test").toString(Charsets.UTF_8))
+        assertEquals(0, files.writes)
+    }
+
+    @Test fun realpathChangeRequiresReopenEvenWithEveryGateOpen() = runTest {
+        val files = Files()
+        val original = RemoteTextEditor.load(files, "/test")
+        files.retarget = true
+        files.writes = 0
+        val release = SaveRelease(true, true, true, AcknowledgedRemote.Content(original.fingerprint))
+        try { RemoteTextEditor.save(files, original, "mine", release = release); fail("retarget must be a hard reject") }
+        catch (_: RemoteTextRetargeted) { }
+        assertEquals("original", files.read("/test").toString(Charsets.UTF_8))
+        assertEquals(0, files.writes)
+    }
+
     @Test fun refusesBinaryAndMalformedUtf8() = runTest {
-        for (bytes in listOf(byteArrayOf(65, 0), byteArrayOf(0xC3.toByte(), 0x28))) {
-            val files = Files().apply { this.files["/test"] = bytes }
-            assertTrue(runCatching { RemoteTextEditor.load(files, "/test") }.isFailure)
-        }
+        val binary = Files().apply { files["/test"] = byteArrayOf(65, 0) }
+        try { RemoteTextEditor.load(binary, "/test"); fail("binary content must fail") } catch (_: RemoteTextBinary) { }
+        val malformed = Files().apply { files["/test"] = byteArrayOf(0xC3.toByte(), 0x28) }
+        try { RemoteTextEditor.load(malformed, "/test"); fail("malformed utf-8 must fail") } catch (_: RemoteTextEncodingFailure) { }
     }
 }

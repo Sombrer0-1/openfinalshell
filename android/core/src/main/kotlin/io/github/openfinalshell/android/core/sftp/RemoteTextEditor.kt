@@ -1,5 +1,11 @@
 package io.github.openfinalshell.android.core.sftp
 
+import io.github.openfinalshell.android.core.filesync.AcknowledgedRemote
+import io.github.openfinalshell.android.core.filesync.RemoteSaveDecision
+import io.github.openfinalshell.android.core.filesync.RemoteSnapshot
+import io.github.openfinalshell.android.core.filesync.SaveInput
+import io.github.openfinalshell.android.core.filesync.SaveRelease
+import io.github.openfinalshell.android.core.ssh.AtomicReplaceUnavailable
 import io.github.openfinalshell.android.core.ssh.SftpChannel
 import io.github.openfinalshell.android.core.ssh.SftpEntry
 import java.nio.ByteBuffer
@@ -17,11 +23,19 @@ data class RemoteTextDocument(
     val permissions: Int?,
     val encoding: String = "utf8",
     val hasBom: Boolean = false,
-    val eol: String = "lf"
+    val eol: String = "lf",
+    val resolvedPath: String = path,
+    val byteSize: Int = 0,
 )
 class RemoteTextConflict : IllegalStateException("remote document has changed")
+class RemoteTextRetargeted : IllegalStateException("remote path changed; reopen the file")
+class RemoteTextShrink(val remoteBytes: Long, val localBytes: Long) :
+    IllegalStateException("remote text shrank from $remoteBytes to $localBytes")
 class RemoteTextEncodingUnavailable : IllegalArgumentException("remote text encoding is unavailable")
 class RemoteTextEncodingFailure : IllegalArgumentException("remote text cannot round-trip with this encoding")
+
+/** The bytes contain NUL, so the file is binary rather than text in any supported encoding. */
+class RemoteTextBinary : IllegalArgumentException("remote file is binary")
 
 enum class RemoteTextEncoding(val id: String, val charsetName: String, val label: String) {
     UTF8("utf8", "UTF-8", "UTF-8"),
@@ -33,7 +47,7 @@ enum class RemoteTextEncoding(val id: String, val charsetName: String, val label
 
 /** Explicit desktop-compatible encoding choices; no guessing or replacement characters. */
 object RemoteTextEditor {
-    const val MAX_BYTES = 2 * 1024 * 1024
+    const val MAX_BYTES = RemoteSaveDecision.MAX_BYTES
     private val UTF8_BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
     fun isEncodingAvailable(encoding: RemoteTextEncoding): Boolean = Charset.isSupported(encoding.charsetName)
@@ -62,43 +76,163 @@ object RemoteTextEditor {
             bytes.write(part)
         }
         val raw = bytes.toByteArray()
-        require(raw.size <= MAX_BYTES && raw.none { it == 0.toByte() }) { "unsupported remote text file" }
+        require(raw.size <= MAX_BYTES) { "remote text file too large" }
+        if (raw.any { it == 0.toByte() }) throw RemoteTextBinary()
         val hasBom = format == RemoteTextEncoding.UTF8 && raw.take(3).toByteArray().contentEquals(UTF8_BOM)
         val body = if (hasBom) raw.copyOfRange(3, raw.size) else raw
         val charset = Charset.forName(format.charsetName)
         val text = decode(body, charset)
         if (!encode(text, charset).contentEquals(body)) throw RemoteTextEncodingFailure()
         // Keep original CR/LF bytes represented in the text. Mixed endings are never silently unified.
-        return RemoteTextDocument(path, text, digest(raw), entry.permissions, format.id, hasBom, detectEol(text))
+        return RemoteTextDocument(
+            path, text, digest(raw), entry.permissions, format.id, hasBom, detectEol(text),
+            resolvedPath = channel.realpath(path),
+            byteSize = raw.size,
+        )
     }
 
-    suspend fun save(channel: SftpChannel, original: RemoteTextDocument, text: String, allowNonAtomic: Boolean = false): RemoteTextDocument {
-        require(text.length <= MAX_BYTES && !text.contains('\u0000')) { "unsupported remote text file" }
-        val format = resolveEncoding(original.encoding)
-        val charset = Charset.forName(format.charsetName)
-        val outputText = if (original.eol == "mixed") text else {
-            val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
-            when (original.eol) { "crlf" -> normalized.replace("\n", "\r\n"); "cr" -> normalized.replace('\n', '\r'); else -> normalized }
+    /**
+     * First save of a file that does not exist yet. The bytes go straight to [SftpChannel.createExclusive];
+     * a local plaintext temp file is not created, and an existing target is left untouched.
+     */
+    suspend fun create(
+        channel: SftpChannel,
+        path: String,
+        text: String,
+        encoding: String = "utf8",
+        eol: String = "lf",
+        hasBom: Boolean = false,
+    ): RemoteTextDocument {
+        val prepared = prepare(encoding, eol, hasBom, text)
+        enforce(RemoteSaveDecision.decide(SaveInput(
+            encodedSize = prepared.bytes.size.toLong(),
+            creating = true,
+            remote = RemoteSnapshot.Absent,
+            openedRealPath = path,
+            atomicAvailable = true,
+            allowNonAtomic = true,
+        )))
+        channel.createExclusive(path, prepared.bytes)
+        return RemoteTextDocument(
+            path = path,
+            text = prepared.text,
+            fingerprint = digest(prepared.bytes),
+            permissions = null,
+            encoding = prepared.format.id,
+            hasBom = hasBom && prepared.format == RemoteTextEncoding.UTF8,
+            eol = detectEol(prepared.text),
+            resolvedPath = channel.realpath(path),
+            byteSize = prepared.bytes.size,
+        )
+    }
+
+    suspend fun save(
+        channel: SftpChannel,
+        original: RemoteTextDocument,
+        text: String,
+        allowNonAtomic: Boolean = false,
+        release: SaveRelease? = null,
+    ): RemoteTextDocument {
+        val gates = release ?: SaveRelease(
+            overwriteRemoteChanges = false,
+            allowNonAtomic = allowNonAtomic,
+            allowShrink = false,
+        )
+        val prepared = prepare(original.encoding, original.eol, original.hasBom, text)
+        val loaded = try {
+            load(channel, original.path, original.encoding)
+        } catch (_: NoSuchElementException) {
+            null
         }
-        val encoded = encode(outputText, charset)
-        if (decode(encoded, charset) != outputText) throw RemoteTextEncodingFailure()
-        val bytes = if (original.hasBom && format == RemoteTextEncoding.UTF8) UTF8_BOM + encoded else encoded
-        require(bytes.size <= MAX_BYTES && bytes.none { it == 0.toByte() })
-        if (load(channel, original.path, original.encoding).fingerprint != original.fingerprint) throw RemoteTextConflict()
-        if (allowNonAtomic) {
-            channel.write(original.path, bytes)
+        val remote = if (loaded == null) {
+            RemoteSnapshot.Absent
+        } else {
+            RemoteSnapshot.Present(loaded.resolvedPath, loaded.fingerprint, loaded.byteSize.toLong())
+        }
+        // Atomic support is discovered by trying the replace. The flag must not skip the other gates.
+        enforce(RemoteSaveDecision.decide(SaveInput(
+            roundTripOk = true,
+            containsNul = false,
+            encodedSize = prepared.bytes.size.toLong(),
+            openedRealPath = original.resolvedPath,
+            remote = remote,
+            baselineFingerprint = original.fingerprint,
+            atomicAvailable = true,
+            overwriteRemoteChanges = gates.overwriteRemoteChanges,
+            allowNonAtomic = true,
+            allowShrink = gates.allowShrink,
+            acknowledged = gates.acknowledged,
+        )))
+        if (gates.allowNonAtomic) {
+            channel.write(original.path, prepared.bytes)
         } else {
             val temp = original.path.substringBeforeLast('/').ifEmpty { "/" }.trimEnd('/') + "/.ofs-edit-${UUID.randomUUID()}.tmp"
             try {
-                channel.write(temp, bytes)
+                channel.write(temp, prepared.bytes)
                 original.permissions?.let { channel.permissions(temp, it and 0xFFF) }
-                // Check again immediately before replacement after the upload has finished.
-                if (load(channel, original.path, original.encoding).fingerprint != original.fingerprint) throw RemoteTextConflict()
+                val latest = try {
+                    load(channel, original.path, original.encoding)
+                } catch (_: NoSuchElementException) {
+                    null
+                }
+                if (latest == null) {
+                    val restoring = gates.overwriteRemoteChanges && gates.acknowledged is AcknowledgedRemote.Absent
+                    if (!restoring) throw RemoteTextConflict()
+                } else if (latest.resolvedPath != original.resolvedPath) {
+                    throw RemoteTextRetargeted()
+                } else if (replacedConflict(gates, original, latest.fingerprint)) {
+                    throw RemoteTextConflict()
+                }
                 channel.atomicReplace(temp, original.path)
             } finally { runCatching { channel.delete(temp) } }
         }
-        return original.copy(text = outputText, fingerprint = digest(bytes), eol = detectEol(outputText))
+        return original.copy(
+            text = prepared.text,
+            fingerprint = digest(prepared.bytes),
+            eol = detectEol(prepared.text),
+            byteSize = prepared.bytes.size,
+        )
     }
+
+    private fun prepare(encoding: String, eol: String, hasBom: Boolean, text: String): Prepared {
+        require(text.length <= MAX_BYTES && !text.contains('\u0000')) { "unsupported remote text file" }
+        val format = resolveEncoding(encoding)
+        val charset = Charset.forName(format.charsetName)
+        val outputText = if (eol == "mixed") text else {
+            val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+            when (eol) { "crlf" -> normalized.replace("\n", "\r\n"); "cr" -> normalized.replace('\n', '\r'); else -> normalized }
+        }
+        val encoded = encode(outputText, charset)
+        if (decode(encoded, charset) != outputText) throw RemoteTextEncodingFailure()
+        val bytes = if (hasBom && format == RemoteTextEncoding.UTF8) UTF8_BOM + encoded else encoded
+        require(bytes.size <= MAX_BYTES && bytes.none { it == 0.toByte() })
+        return Prepared(outputText, bytes, format)
+    }
+
+    private fun replacedConflict(gates: SaveRelease, original: RemoteTextDocument, latestFingerprint: String): Boolean {
+        if (!gates.overwriteRemoteChanges) return latestFingerprint != original.fingerprint
+        val acknowledged = gates.acknowledged
+        return acknowledged !is AcknowledgedRemote.Content || acknowledged.fingerprint != latestFingerprint
+    }
+
+    private fun enforce(decision: RemoteSaveDecision) {
+        when (decision) {
+            RemoteSaveDecision.Proceed -> Unit
+            is RemoteSaveDecision.HardReject -> when (decision.reason) {
+                RemoteSaveDecision.HardReject.Reason.ENCODING -> throw RemoteTextEncodingFailure()
+                RemoteSaveDecision.HardReject.Reason.NUL,
+                RemoteSaveDecision.HardReject.Reason.TOO_LARGE -> throw IllegalArgumentException("unsupported remote text file")
+                RemoteSaveDecision.HardReject.Reason.REALPATH_CHANGED -> throw RemoteTextRetargeted()
+            }
+            is RemoteSaveDecision.Conflict -> throw RemoteTextConflict()
+            is RemoteSaveDecision.ShrinkConfirm -> throw RemoteTextShrink(decision.remoteBytes, decision.localBytes)
+            RemoteSaveDecision.NonAtomicConfirm -> throw AtomicReplaceUnavailable()
+            RemoteSaveDecision.AlreadyExists -> throw IllegalStateException("remote file already exists")
+            RemoteSaveDecision.Reread, RemoteSaveDecision.KeepDraft -> error("encoding switch is not a save")
+        }
+    }
+
+    private data class Prepared(val text: String, val bytes: ByteArray, val format: RemoteTextEncoding)
 
     private fun decode(bytes: ByteArray, charset: Charset): String = try {
         charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)

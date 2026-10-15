@@ -1,10 +1,16 @@
 package io.github.openfinalshell.android.core.ssh
 
 import android.util.Log
+import io.github.openfinalshell.android.core.connection.CharsetShellChannel
+import io.github.openfinalshell.android.core.connection.ConnectionTiming
+import io.github.openfinalshell.android.core.connection.SshRuntimePolicy
+import io.github.openfinalshell.android.core.connection.charsetNeedsTranslation
 import io.github.openfinalshell.android.core.model.ConnectionProfile
 import io.github.openfinalshell.android.core.model.ForwardRule
 import io.github.openfinalshell.android.core.model.SessionState
 import java.io.ByteArrayInputStream
+import java.util.concurrent.TimeUnit
+import org.apache.sshd.common.session.SessionHeartbeatController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,7 +25,6 @@ import org.apache.sshd.client.session.ClientSession
 import org.apache.sshd.client.keyverifier.RejectAllServerKeyVerifier
 import org.apache.sshd.client.auth.keyboard.UserInteraction
 import org.apache.sshd.common.config.keys.FilePasswordProvider
-import org.apache.sshd.sftp.client.SftpClientFactory
 
 /** Apache MINA SSHD connection adapter. Channel adapters are isolated behind SshTransport. */
 class MinaSshTransport(
@@ -38,11 +43,17 @@ class MinaSshTransport(
     private var session: ClientSession? = null
     private var intentionalClose = false
     private var proxyTunnel: ProxyTunnel? = null
+    private var ptyType = "xterm-256color"
+    private var charsetName = "utf-8"
+    private var startupCommand: String? = null
 
     override suspend fun connect(profile: ConnectionProfile, credentials: Credentials) = withContext(Dispatchers.IO) {
         require(profile.port in 1..65535) { "invalid SSH port" }
         check(session == null) { "SSH session is already connected" }
         intentionalClose = false
+        ptyType = profile.terminal.termType.ifBlank { "xterm-256color" }
+        charsetName = profile.terminal.charset.ifBlank { "utf-8" }
+        startupCommand = profile.terminal.startupCommand?.trim()?.ifEmpty { null }
         mutableState.value = SessionState.CONNECTING
         val ssh: SshClient
         var connected: ClientSession? = null
@@ -53,10 +64,20 @@ class MinaSshTransport(
             // Android can report every default KEX as unsupported during MINA's capability
             // scan. Supply the provider-aware list explicitly so start() never receives an
             // empty KeyExchangeFactories configuration.
-            val kexFactories = AndroidSshdInitializer.keyExchangeFactories()
+            val baseKex = AndroidSshdInitializer.keyExchangeFactories()
+            val kexFactories = if (profile.options.legacyAlgorithms) {
+                SshRuntimePolicy.appendLegacyKex(baseKex)
+            } else {
+                baseKex
+            }
             ssh = ClientBuilder.builder()
                 .keyExchangeFactories(kexFactories)
                 .build()
+            if (profile.options.legacyAlgorithms) SshRuntimePolicy.applyLegacy(ssh)
+            if (profile.options.compress) {
+                val compression = SshRuntimePolicy.compressionFactories()
+                if (compression.any { it.name != "none" }) ssh.compressionFactories = compression
+            }
             // Register the instance before any configuration/start call so every partially
             // initialized client is stopped by the common failure path below.
             client = ssh
@@ -73,7 +94,7 @@ class MinaSshTransport(
             ssh.userInteraction = PasswordKeyboardInteraction(credentials.password ?: credentials.passphrase)
             ssh.start()
             mutableState.value = SessionState.AUTHENTICATING
-            val timeout = (profile.options.readyTimeout.coerceIn(5, 120) * 1_000).toLong()
+            val timeout = ConnectionTiming.readyTimeoutMillis(profile.options.readyTimeout)
             val proxy = profile.proxy?.takeUnless { it.type == "none" }
             if (proxy != null) {
                 val password = proxy.passwordRef?.let { proxyPasswordResolver(it) }
@@ -91,6 +112,10 @@ class MinaSshTransport(
                     .forEach { connected.addPublicKeyIdentity(it) }
             }
             connected.auth().verify(timeout)
+            val keepaliveSeconds = ConnectionTiming.keepaliveSeconds(profile.options.keepaliveInterval)
+            if (keepaliveSeconds > 0) {
+                connected.setSessionHeartbeat(SessionHeartbeatController.HeartbeatType.IGNORE, TimeUnit.SECONDS, keepaliveSeconds.toLong())
+            }
             session = connected
             connected.addCloseFutureListener {
                 if (!intentionalClose && session === connected) {
@@ -118,11 +143,20 @@ class MinaSshTransport(
     override suspend fun openShell(cols: Int, rows: Int): ShellChannel = withContext(Dispatchers.IO) {
         checkNotNull(session) { "SSH session is not connected" }.let { current ->
             val channel = current.createShellChannel()
-            channel.setPtyType("xterm-256color")
+            channel.setPtyType(ptyType)
             channel.setPtyColumns(cols)
             channel.setPtyLines(rows)
             channel.open().verify()
-            MinaShellChannel(channel)
+            val shell = MinaShellChannel(channel)
+            val command = startupCommand
+            if (!charsetNeedsTranslation(charsetName)) {
+                if (command != null) shell.write((command + "\n").toByteArray(Charsets.UTF_8))
+                shell
+            } else {
+                CharsetShellChannel(shell, charsetName).also { translated ->
+                    if (command != null) translated.writeRemoteText(command + "\n")
+                }
+            }
         }
     }
 
@@ -137,7 +171,7 @@ class MinaSshTransport(
 
     override suspend fun openSftp(): SftpChannel = withContext(Dispatchers.IO) {
         MinaSftpChannel(
-            SftpClientFactory.instance().createSftpClient(checkNotNull(session) { "SSH session is not connected" })
+            StrictSftpClientFactory.createSftpClient(checkNotNull(session) { "SSH session is not connected" })
         )
     }
 
@@ -174,6 +208,9 @@ class MinaSshTransport(
         client?.stop()
         session = null
         client = null
+        ptyType = "xterm-256color"
+        charsetName = "utf-8"
+        startupCommand = null
         mutableState.value = SessionState.CLOSED
     }
 }

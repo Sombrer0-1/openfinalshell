@@ -36,7 +36,7 @@ class AssistantViewModel(app: Application): AndroidViewModel(app) {
     }
     fun refresh() = action {
         val profiles = repository.profiles()
-        val historyFlag = database.documents().find("tools.history.enabled")?.json == "true"
+        val historyFlag = database.documents().find(ToolRepository.HISTORY_ENABLED_DOCUMENT)?.json == "true"
         val snippets=repository.snippets(); val groups=repository.groups(); val history=repository.history()
         mutable.update { old -> old.copy(profiles=profiles,selected=profiles.find { it.id==old.selected?.id } ?: if(initialSelection) profiles.firstOrNull() else null,
             snippets=snippets,groups=groups,history=history,saveHistory=historyFlag) }
@@ -109,7 +109,7 @@ class AssistantViewModel(app: Application): AndroidViewModel(app) {
     fun saveGroup(id: String?,name: String) = action { repository.saveGroup(id,name); refresh() }
     fun deleteGroup(id: String) = action { repository.deleteGroup(id); refresh() }
     fun historyEnabled(enabled: Boolean) = action {
-        database.documents().upsert(DocumentEntity("tools.history.enabled",enabled.toString()))
+        database.documents().upsert(DocumentEntity(ToolRepository.HISTORY_ENABLED_DOCUMENT, enabled.toString()))
         mutable.update { it.copy(saveHistory=enabled) }
     }
     fun recordSubmittedCommand(command: String) = action { if(state.value.saveHistory) { repository.recordCommand(command); refresh() } }

@@ -82,6 +82,7 @@
     <string name="status_forwarding_rule_save_failed">转发规则保存失败</string>
     <string name="status_forwarding_rule_delete_failed">转发规则删除失败</string>
     <string name="status_forwarding_start_failed">转发启动失败</string>
+    <string name="status_forwarding_requires_ssh">端口转发需要 SSH 连接。</string>
     <string name="status_profile_save_failed">连接保存失败</string>
     <string name="status_profile_delete_failed">连接删除失败</string>
     <string name="status_group_save_failed">分组保存失败</string>

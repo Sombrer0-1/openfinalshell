@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">Codificação do editor: %1$s</string>
     <string name="port_encoding_unavailable">Esta codificação não está disponível neste dispositivo.</string>
     <string name="port_encoding_lossless">O arquivo ou texto não pode ser representado sem perdas nesta codificação. Escolha a correta e reabra o arquivo. Nada foi salvo.</string>
+    <string name="port_editor_binary">Este arquivo é binário e não pode ser aberto no editor de texto.</string>
     <string name="port_eol_mixed">As terminações de linha mistas são preservadas. Novas linhas mantêm as terminações digitadas.</string>
 </resources>

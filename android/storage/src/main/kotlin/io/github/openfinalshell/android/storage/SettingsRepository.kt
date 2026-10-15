@@ -1,6 +1,8 @@
 package io.github.openfinalshell.android.storage
 
 import io.github.openfinalshell.android.core.protocol.ProtocolJson
+import io.github.openfinalshell.android.core.termops.ScrollbackLimits
+import io.github.openfinalshell.android.core.termops.TerminalPaletteId
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,8 +20,16 @@ data class AndroidSettings(
     val terminalFontSize: Int = 14,
     val terminalCursorStyle: String = "block",
     val terminalScrollbackLines: Int = 2_000,
+    val terminalPalette: String = TerminalPaletteId.FOLLOW_UI.storageKey,
+    /** One of [LINE_HEIGHTS]. 1.0 matches TerminalRenderer's font spacing. */
+    val terminalLineHeight: String = "1.0",
+    val terminalCursorBlink: Boolean = false,
+    val terminalCopyOnSelect: Boolean = true,
+    val terminalConfirmMultilinePaste: Boolean = true,
     val sftpConcurrency: Int = 3,
     val sftpConflictPolicy: String = "ask",
+    /** File row tap. `download` or `edit`. Stays on this device and is not part of portable export. */
+    val sftpFileTap: String = "download",
     val sftpShowHiddenFiles: Boolean = false,
     val monitorIntervalSeconds: Int = 5,
     val downloadDirectoryUri: String? = null,
@@ -32,7 +42,11 @@ data class AndroidSettings(
      */
     val localAllowRoot: Boolean = false,
     /** Remembers that the user was already sent to the all-files-access settings page. */
-    val localAllFilesAccessRequested: Boolean = false
+    val localAllFilesAccessRequested: Boolean = false,
+    /** Local pane sizes in dp. They stay on this device and are not part of portable export. */
+    val sessionConnectionWidthDp: Int = 280,
+    val sessionMonitorWidthDp: Int = 280,
+    val sessionFileHeightDp: Int = 240
 ) {
     /** Clamp values read from old or hand-edited documents before they reach the UI/core. */
     fun normalized(): AndroidSettings = copy(
@@ -42,12 +56,18 @@ data class AndroidSettings(
         accentColor = accentColor.takeIf { HEX_COLOR.matches(it) } ?: "#1677FF",
         terminalFontSize = terminalFontSize.coerceIn(10, 32),
         terminalCursorStyle = terminalCursorStyle.takeIf { it in CURSOR_STYLES } ?: "block",
-        terminalScrollbackLines = terminalScrollbackLines.coerceIn(200, 20_000),
+        terminalScrollbackLines = ScrollbackLimits.clamp(terminalScrollbackLines),
+        terminalPalette = TerminalPaletteId.fromStorageKey(terminalPalette).storageKey,
+        terminalLineHeight = terminalLineHeight.takeIf { it in LINE_HEIGHTS } ?: "1.0",
         sftpConcurrency = sftpConcurrency.coerceIn(1, 8),
         sftpConflictPolicy = sftpConflictPolicy.takeIf { it in CONFLICT_POLICIES } ?: "ask",
+        sftpFileTap = sftpFileTap.takeIf { it in FILE_TAPS } ?: "download",
         monitorIntervalSeconds = monitorIntervalSeconds.coerceIn(2, 60),
         downloadDirectoryUri = downloadDirectoryUri?.takeIf { it.isNotBlank() },
-        localShellTierDefault = localShellTierDefault.takeIf { it in LOCAL_TIERS } ?: "auto"
+        localShellTierDefault = localShellTierDefault.takeIf { it in LOCAL_TIERS } ?: "auto",
+        sessionConnectionWidthDp = sessionConnectionWidthDp.coerceAtLeast(200),
+        sessionMonitorWidthDp = sessionMonitorWidthDp.coerceAtLeast(240),
+        sessionFileHeightDp = sessionFileHeightDp.coerceAtLeast(160)
     )
 
     companion object {
@@ -60,7 +80,9 @@ data class AndroidSettings(
         )
         val THEMES = setOf("system", "light", "dark")
         val CURSOR_STYLES = setOf("block", "line", "underline")
-        val CONFLICT_POLICIES = setOf("ask", "overwrite", "skip")
+        val LINE_HEIGHTS = setOf("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.8", "2.0")
+        val CONFLICT_POLICIES = setOf("ask", "overwrite", "skip", "rename")
+        val FILE_TAPS = setOf("download", "edit")
         val LOCAL_TIERS = io.github.openfinalshell.android.core.model.LocalShellTier.all.toSet()
         private val HEX_COLOR = Regex("^#[0-9A-Fa-f]{6}$")
 

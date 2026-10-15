@@ -99,6 +99,7 @@ fun AssistantTools(sessionId: String?, selectedText: String, onInsert: (String,S
     var target by remember { mutableStateOf<String?>(null) }
     var section by remember { mutableStateOf(0) }
     val state by vm.state.collectAsState()
+    LaunchedEffect(open, section) { if (open && section == 2) vm.refresh() }
     val clipboard=LocalClipboardManager.current
     var prompt by remember { mutableStateOf("") }
     var context by remember { mutableStateOf("") }

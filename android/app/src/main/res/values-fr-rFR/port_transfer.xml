@@ -26,5 +26,6 @@
     <string name="port_editor_encoding">Encodage de l’éditeur : %1$s</string>
     <string name="port_encoding_unavailable">Cet encodage est indisponible sur cet appareil.</string>
     <string name="port_encoding_lossless">Le fichier ou le texte ne peut être représenté sans perte avec cet encodage. Choisissez le bon encodage et rouvrez le fichier. Aucune modification enregistrée.</string>
+    <string name="port_editor_binary">Ce fichier est binaire et ne peut pas être ouvert dans l\'éditeur de texte.</string>
     <string name="port_eol_mixed">Les fins de ligne mixtes sont conservées. Les nouvelles lignes gardent les fins saisies.</string>
 </resources>

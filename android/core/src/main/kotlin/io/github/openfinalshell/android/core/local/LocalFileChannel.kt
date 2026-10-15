@@ -6,9 +6,12 @@ import io.github.openfinalshell.android.core.ssh.SftpEntry
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.attribute.PosixFilePermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,12 +53,16 @@ class LocalFileChannel(
                 attributes.isSymbolicLink -> SftpEntry.Type.SYMLINK
                 else -> SftpEntry.Type.OTHER
             }
+            val ownerGroup = ownerAndGroup(child)
             SftpEntry(
                 name = child.name,
                 path = "$prefix/${child.name}",
                 type = type,
                 size = attributes?.size(),
-                permissions = readMode(child)
+                permissions = readMode(child),
+                owner = ownerGroup.first,
+                group = ownerGroup.second,
+                modifiedAtMillis = attributes?.lastModifiedTime()?.toMillis(),
             )
         }
     }
@@ -120,8 +127,60 @@ class LocalFileChannel(
      * ownership can never be preserved without root, and on FUSE-backed shared storage the mode is
      * synthetic and `chmod` is refused outright. There is nothing here worth failing a save for.
      */
+    override suspend fun createExclusive(path: String, data: ByteArray) = withContext(Dispatchers.IO) {
+        Files.newByteChannel(
+            File(path).toPath(),
+            StandardOpenOption.WRITE,
+            StandardOpenOption.CREATE_NEW,
+        ).use { channel ->
+            val buffer = ByteBuffer.wrap(data)
+            while (buffer.hasRemaining()) channel.write(buffer)
+        }
+        Unit
+    }
+
+    override suspend fun realpath(path: String): String = withContext(Dispatchers.IO) {
+        File(path).canonicalPath
+    }
+
+    override suspend fun lstat(path: String): SftpEntry? = withContext(Dispatchers.IO) {
+        val file = File(path)
+        val attributes = runCatching {
+            Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        }.getOrNull() ?: return@withContext null
+        val type = when {
+            attributes.isDirectory -> SftpEntry.Type.DIRECTORY
+            attributes.isRegularFile -> SftpEntry.Type.FILE
+            attributes.isSymbolicLink -> SftpEntry.Type.SYMLINK
+            else -> SftpEntry.Type.OTHER
+        }
+        val ownerGroup = ownerAndGroup(file)
+        SftpEntry(
+            name = file.name,
+            path = path,
+            type = type,
+            size = attributes.size(),
+            permissions = readMode(file),
+            owner = ownerGroup.first,
+            group = ownerGroup.second,
+            modifiedAtMillis = attributes.lastModifiedTime().toMillis(),
+        )
+    }
+
     override suspend fun permissions(path: String, mode: Int) = withContext(Dispatchers.IO) {
-        runCatching { Files.setPosixFilePermissions(File(path).toPath(), modeToPermissions(mode)) }
+        runCatching {
+            val file = File(path)
+            val existing = readMode(file)
+            val merged = mode and 0xFFF
+            val nio = file.toPath()
+            val stamped = if (existing != null) (existing and 0xF000) or merged else merged
+            val unix = if (existing != null) {
+                runCatching { Files.setAttribute(nio, "unix:mode", stamped, LinkOption.NOFOLLOW_LINKS) }
+            } else {
+                Result.failure(UnsupportedOperationException())
+            }
+            if (unix.isFailure) Files.setPosixFilePermissions(nio, modeToPermissions(merged))
+        }
         Unit
     }
 
@@ -158,8 +217,25 @@ class LocalFileChannel(
         if (!file.delete()) throw IOException("cannot delete ${file.path}")
     }
 
+    private fun ownerAndGroup(file: File): Pair<String?, String?> {
+        val posix = runCatching {
+            Files.readAttributes(file.toPath(), PosixFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        }.getOrNull()
+        if (posix != null) return posix.owner()?.name to posix.group()?.name
+        val owner = runCatching { Files.getOwner(file.toPath(), LinkOption.NOFOLLOW_LINKS).name }.getOrNull()
+        return owner to null
+    }
+
     /** Returns the POSIX mode as an int, or null when the filesystem does not report one. */
-    private fun readMode(file: File): Int? = runCatching {
+    private fun readMode(file: File): Int? {
+        val unix = runCatching {
+            Files.getAttribute(file.toPath(), "unix:mode", LinkOption.NOFOLLOW_LINKS) as Int
+        }.getOrNull()
+        if (unix != null) return unix
+        return readPosixMode(file)
+    }
+
+    private fun readPosixMode(file: File): Int? = runCatching {
         Files.getPosixFilePermissions(file.toPath(), LinkOption.NOFOLLOW_LINKS)
             .fold(0) { mode, permission -> mode or permission.bit() }
     }.getOrNull()
