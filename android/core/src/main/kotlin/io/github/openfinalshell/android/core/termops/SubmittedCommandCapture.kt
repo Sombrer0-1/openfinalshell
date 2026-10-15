@@ -41,8 +41,8 @@ class SubmittedCommandCapture {
         val line = readLogicalLine(buffer)
         if (this.row == start && line.startsWith(prompt)) return
         this.row = start
-        column = buffer.cursorX
-        prompt = if (buffer.cursorX <= 0) "" else line.substring(0, minOf(buffer.cursorX, line.length))
+        column = logicalCursorColumn(buffer, start)
+        prompt = if (column <= 0) "" else line.substring(0, minOf(column, line.length))
         trusted = true
     }
 
@@ -113,6 +113,12 @@ private fun logicalStartRow(buffer: TerminalLineBuffer): Int {
         row -= 1
     }
     return row
+}
+
+/** Column of the cursor inside the logical line: the wrapped rows above it count as [TerminalLineBuffer.columns] each. */
+private fun logicalCursorColumn(buffer: TerminalLineBuffer, start: Int): Int {
+    val rowsAbove = (buffer.baseY + buffer.cursorY - start).coerceAtLeast(0)
+    return rowsAbove * buffer.columns + buffer.cursorX
 }
 
 private fun readLogicalLineFrom(buffer: TerminalLineBuffer, start: Int): String {

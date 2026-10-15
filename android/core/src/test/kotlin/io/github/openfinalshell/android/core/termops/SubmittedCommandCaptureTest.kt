@@ -41,6 +41,27 @@ class SubmittedCommandCaptureTest {
     }
 
     @Test
+    fun `a wrapped prompt measures the cursor inside the logical line`() {
+        val promptRows = listOf(
+            TerminalBufferLine("localhost:/data/data/io.github.openfinalshell.", wrapped = false),
+            TerminalBufferLine("android/files/home $ ", wrapped = true)
+        )
+        val capture = SubmittedCommandCapture()
+        capture.noteKeystroke(buffer(promptRows, cursorX = "android/files/home $ ".length, cursorY = 1))
+        val snapshot = capture.snapshot()
+        capture.noteSubmit()
+
+        val echoed = listOf(
+            TerminalBufferLine("localhost:/data/data/io.github.openfinalshell.", wrapped = false),
+            TerminalBufferLine("android/files/home $ uname -a", wrapped = true),
+            TerminalBufferLine("Linux localhost 6.6.66 x86_64 Toybox", wrapped = false),
+            TerminalBufferLine("localhost:/data/data/io.github.openfinalshell.", wrapped = false),
+            TerminalBufferLine("android/files/home $ ", wrapped = true)
+        )
+        assertEquals("uname -a", capture.captureEcho(buffer(echoed, cursorX = "android/files/home $ ".length, cursorY = 4), snapshot))
+    }
+
+    @Test
     fun `uncertain boundaries password prompts and the alternate screen are dropped`() {
         assertNull(extractSubmittedCommand("➜  ~ echo a > b.txt", null))
         assertNull(extractSubmittedCommand("PS C:\\> dir", null))
