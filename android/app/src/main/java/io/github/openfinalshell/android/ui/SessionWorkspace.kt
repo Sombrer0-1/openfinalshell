@@ -282,17 +282,7 @@ private fun SessionPanes(
 
 @Composable
 private fun FilePane(state: AndroidUiState, viewModel: MainViewModel, settingsViewModel: SettingsViewModel) {
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)) {
-            TextButton(onClick = viewModel::sftpBack, modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)) {
-                Text(stringResource(R.string.action_history_back))
-            }
-            TextButton(onClick = viewModel::sftpForward, modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)) {
-                Text(stringResource(R.string.action_history_forward))
-            }
-        }
-        Box(Modifier.weight(1f)) { SftpScreen(state, viewModel, settingsViewModel) }
-    }
+    Box(Modifier.fillMaxSize()) { SftpScreen(state, viewModel, settingsViewModel) }
 }
 
 @Composable

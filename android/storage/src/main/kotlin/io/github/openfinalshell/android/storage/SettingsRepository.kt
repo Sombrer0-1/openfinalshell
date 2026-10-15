@@ -46,7 +46,8 @@ data class AndroidSettings(
     /** Local pane sizes in dp. They stay on this device and are not part of portable export. */
     val sessionConnectionWidthDp: Int = 280,
     val sessionMonitorWidthDp: Int = 280,
-    val sessionFileHeightDp: Int = 240
+    // Covers the file pane chrome and leaves a usable list at the bottom-half default.
+    val sessionFileHeightDp: Int = 360
 ) {
     /** Clamp values read from old or hand-edited documents before they reach the UI/core. */
     fun normalized(): AndroidSettings = copy(
