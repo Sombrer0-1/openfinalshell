@@ -129,9 +129,12 @@ class SshTerminalView @JvmOverloads constructor(
     var onHistory: (() -> Unit)? = null
     var onPasteShortcut: (() -> Unit)? = null
     var onCloseTab: (() -> Unit)? = null
+    /** Fired when a key press or committed text consumes the on-screen Ctrl toggle. */
+    var onStickyCtrlConsumed: (() -> Unit)? = null
     var closeSearchOnEscape: Boolean = false
     var copyOnSelect: Boolean = true
     private var selectionEnd: TerminalCell? = null
+    private var stickyCtrl = false
     private var lineHeightMultiplier = 1f
     private var cursorBlink = false
     private var blinkOn = true
@@ -415,8 +418,19 @@ class SshTerminalView @JvmOverloads constructor(
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
                 val value = text?.toString().orEmpty()
                 if (value.isEmpty()) return true
-                if (isPasteChunk(value)) onPasteText?.invoke(value) ?: dispatch(value)
-                else dispatch(value)
+                if (isPasteChunk(value)) {
+                    onPasteText?.invoke(value) ?: dispatch(value)
+                    return true
+                }
+                if (takeStickyCtrl()) {
+                    onStickyCtrlConsumed?.invoke()
+                    val control = TerminalModes.controlChar(value[0])
+                    if (control != null) {
+                        dispatch(control.toString())
+                        return true
+                    }
+                }
+                dispatch(value)
                 return true
             }
 
@@ -488,8 +502,12 @@ class SshTerminalView @JvmOverloads constructor(
         }
         if (consumeHardwareShortcut(event)) return true
         val terminal = controller?.emulator ?: return false
+        val sticky = !event.isCtrlPressed && takeStickyCtrl()
+        if (sticky) onStickyCtrlConsumed?.invoke()
+        val ctrl = event.isCtrlPressed || sticky
+        val plain = if (ctrl) event.getUnicodeChar(event.metaState and CTRL_META.inv()) else 0
         synchronized(terminal) {
-            val modifiers = buildKeyModifiers(event)
+            val modifiers = buildKeyModifiers(event) or if (sticky) KeyHandler.KEYMOD_CTRL else 0
             KeyHandler.getCode(
                 event.keyCode,
                 modifiers,
@@ -500,11 +518,31 @@ class SshTerminalView @JvmOverloads constructor(
                 return true
             }
         }
+        if (plain != 0) {
+            val control = TerminalModes.controlChar(plain.toChar())
+            if (control != null) {
+                dispatch(control.toString())
+                return true
+            }
+            // Ctrl over a key with no control meaning: consumed, so the plain character stays hidden.
+            return true
+        }
         if (event.unicodeChar != 0) {
             dispatch(String(Character.toChars(event.unicodeChar)))
             return true
         }
         return false
+    }
+
+    /** The on-screen Ctrl toggle arms the next key press or committed text with Ctrl. */
+    fun setStickyCtrl(on: Boolean) {
+        stickyCtrl = on
+    }
+
+    private fun takeStickyCtrl(): Boolean {
+        val held = stickyCtrl
+        stickyCtrl = false
+        return held
     }
 
     /** Fixed hardware-keyboard shortcuts. Ctrl+C stays with the terminal as an interrupt. */
@@ -638,6 +676,7 @@ class SshTerminalView @JvmOverloads constructor(
         const val MIN_COLUMNS = 4
         const val MIN_ROWS = 4
         const val BLINK_MS = 500L
+        val CTRL_META = KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON or KeyEvent.META_CTRL_RIGHT_ON
     }
 
     private data class TerminalCell(val column: Int, val row: Int) : Comparable<TerminalCell> {

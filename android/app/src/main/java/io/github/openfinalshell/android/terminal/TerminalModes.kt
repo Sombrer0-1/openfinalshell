@@ -80,6 +80,24 @@ object TerminalModes {
     /** Internal bit Termux uses for DECSET 2004. See TerminalEmulator.mapDecSetBitToInternalBit. */
     private const val BRACKETED_PASTE_BIT = 1 shl 10
 
+    /**
+     * Ctrl over a printable ASCII key maps onto the C0 control range the way xterm does: letters
+     * become their control counterparts and space, @, [, \, ], ^, _ and ? follow the classic
+     * table. Other characters have no control meaning, so callers decide what to do with them.
+     */
+    fun controlChar(plain: Char): Char? = when (plain) {
+        in 'a'..'z' -> (plain.code - 0x60).toChar()
+        in 'A'..'Z' -> (plain.code - 0x40).toChar()
+        ' ', '@' -> 0.toChar()
+        '[' -> 0x1b.toChar()
+        '\\' -> 0x1c.toChar()
+        ']' -> 0x1d.toChar()
+        '^' -> 0x1e.toChar()
+        '_' -> 0x1f.toChar()
+        '?' -> 0x7f.toChar()
+        else -> null
+    }
+
     fun readBracketedPaste(emulator: TerminalEmulator): Boolean? = runCatching {
         val field = TerminalEmulator::class.java.getDeclaredField("mCurrentDecSetFlags")
         field.isAccessible = true

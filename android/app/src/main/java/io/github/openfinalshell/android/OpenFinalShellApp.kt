@@ -964,6 +964,8 @@ internal fun TerminalScreen(
                                         view.setPalette(palette)
                                         view.setCursorBlink(settings.terminalCursorBlink)
                                         view.setLineHeightMultiplier(lineHeight)
+                                        view.setStickyCtrl(ctrlHeld)
+                                        view.onStickyCtrlConsumed = { ctrlHeld = false }
                                     }
                                     view.contentDescription = terminalDescription
                                     view.bind(
