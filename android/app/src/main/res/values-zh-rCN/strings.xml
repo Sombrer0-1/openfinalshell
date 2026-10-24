@@ -289,7 +289,7 @@
     <string name="settings_save_failed">无法保存设置</string>
     <string name="sync_peer_metadata">%1$s:%2$d，版本 %3$s</string>
     <string name="notification_channel_connections">OpenFinalShell 连接</string>
-    <string name="notification_summary">SSH：%1$d，传输：%2$d，转发：%3$d</string>
+    <string name="notification_summary">会话：%1$d，传输：%2$d，转发：%3$d</string>
     <string name="notification_reopen_to_restore">重新打开 OpenFinalShell 以恢复任务</string>
     <string name="update_failed">无法完成更新。</string>
 </resources>

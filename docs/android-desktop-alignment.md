@@ -265,7 +265,7 @@ android\gradlew.bat -p android :app:checkI18n testDebugUnitTest :app:assembleDeb
 
 - 类型是 `specialUse`（维持 SSH，而不是 6 小时上限的 `dataSync`）。
 - 常驻通知，点按回到应用。
-- 部分唤醒锁只在有会话时持有，屏幕保持关闭，心跳线程仍能发 `SSH_MSG_IGNORE`。
+- 部分唤醒锁在有会话、传输、转发或连接握手时持有（带超时并续租），屏幕保持关闭，心跳线程仍能发 `SSH_MSG_IGNORE`。
 - Wi-Fi 下加低延迟 Wi-Fi 锁，避免电台休眠。
 - 用户关闭全部会话后停止服务并释放锁。
 - 强制停止或进程被杀死后套接字不复存在。系统若以空 Intent 拉起服务，只提示重新打开，不再假装会话还在。

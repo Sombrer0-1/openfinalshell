@@ -158,7 +158,7 @@
     <string name="sync_last_result">上次同步：%1$d 個設定檔，%2$d 個轉送，%3$d 個機密項目，略過 %4$d 個</string>
     <string name="sync_peer_metadata">%1$s:%2$d，版本 %3$s</string>
     <string name="notification_channel_connections">OpenFinalShell 連線</string>
-    <string name="notification_summary">SSH：%1$d，傳輸：%2$d，轉送：%3$d</string>
+    <string name="notification_summary">工作階段：%1$d，傳輸：%2$d，轉送：%3$d</string>
     <string name="notification_reopen_to_restore">重新開啟 OpenFinalShell 以還原工作</string>
     <string name="update_failed">無法完成更新。</string>
 </resources>

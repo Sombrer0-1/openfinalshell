@@ -203,7 +203,11 @@ fun OpenFinalShellApp(
     val context = androidx.compose.ui.platform.LocalContext.current
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* Denied is fine: FGS still starts; OEM may hide the notification. */ }
+    ) { granted ->
+        // Denied is fine: FGS still runs; OEM may hide the notification.
+        // Granted: republish immediately so the keep-alive notice appears without HOME+resume.
+        if (granted) viewModel.ensureBackgroundKeepAlive()
+    }
     LaunchedEffect(Unit) {
         viewModel.requestNotificationPermission.collect {
             if (Build.VERSION.SDK_INT < 33) return@collect
@@ -211,7 +215,9 @@ fun OpenFinalShellApp(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) {
+            if (granted) {
+                viewModel.ensureBackgroundKeepAlive()
+            } else {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }

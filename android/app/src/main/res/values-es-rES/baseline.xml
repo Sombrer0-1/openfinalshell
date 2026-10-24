@@ -156,7 +156,7 @@
     <string name="sync_last_result">Última sincronización: %1$d perfiles, %2$d reenvíos, %3$d secretos, %4$d omitidos</string>
     <string name="sync_peer_metadata">%1$s:%2$d, versión %3$s</string>
     <string name="notification_channel_connections">Conexiones de OpenFinalShell</string>
-    <string name="notification_summary">SSH: %1$d, transferencias: %2$d, reenvíos: %3$d</string>
+    <string name="notification_summary">Sesiones: %1$d, transferencias: %2$d, reenvíos: %3$d</string>
     <string name="notification_reopen_to_restore">Vuelva a abrir OpenFinalShell para restaurar las tareas</string>
     <string name="update_failed">No se pudo completar la actualización.</string>
 </resources>

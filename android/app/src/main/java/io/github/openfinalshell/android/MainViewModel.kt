@@ -427,14 +427,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             sessions.events.collect { event ->
                 when (event) {
                     is SessionEvent.StateChanged -> {
-                        val status = when (event.state) {
-                            SessionState.CONNECTING -> UiStatus(StatusKey.CONNECTING)
-                            SessionState.AUTHENTICATING -> UiStatus(StatusKey.AUTHENTICATING)
-                            SessionState.READY -> UiStatus(StatusKey.CONNECTED)
-                            SessionState.RECONNECTING -> UiStatus(StatusKey.RECONNECTING)
-                            SessionState.CLOSED -> UiStatus(StatusKey.DISCONNECTED)
+                        updateState { current ->
+                            val nextStatus = when (event.state) {
+                                SessionState.CONNECTING -> UiStatus(StatusKey.CONNECTING)
+                                SessionState.AUTHENTICATING -> UiStatus(StatusKey.AUTHENTICATING)
+                                SessionState.READY -> UiStatus(StatusKey.CONNECTED)
+                                SessionState.RECONNECTING -> UiStatus(StatusKey.RECONNECTING)
+                                SessionState.CLOSED -> {
+                                    // Do not wipe a concrete connect failure (e.g. timeout while the
+                                    // host-key dialog was open) with a generic "disconnected".
+                                    val keep = current.status.key == StatusKey.CONNECTION_FAILED ||
+                                        current.status.key == StatusKey.SSH_COMPONENTS_UNAVAILABLE
+                                    if (keep) current.status else UiStatus(StatusKey.DISCONNECTED)
+                                }
+                            }
+                            current.copy(status = nextStatus)
                         }
-                        updateState { it.copy(status = status) }
                         when (event.state) {
                             SessionState.CLOSED -> {
                                 cancelSessionTransfers(event.sessionId)
@@ -1456,6 +1464,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             probeDirectLatency(profile, sessionId)
             collectStaticInfo(sessionId)
         } catch (error: Throwable) {
+            // Drop a stuck host-key dialog if the handshake already died (timeout / negotiate fail).
+            pendingHostKey?.complete(false)
             setStatus(readableError(error, StatusKey.CONNECTION_FAILED))
         } finally {
             finishConnectAttempt()
@@ -2621,8 +2631,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearFinishedTransfers() = transferQueue.clearFinished()
 
     fun acceptHostKey() {
-        val prompt = state.value.hostKeyPrompt
-        if (prompt?.previousFingerprint != null) {
+        val prompt = state.value.hostKeyPrompt ?: return
+        if (prompt.previousFingerprint != null) {
             viewModelScope.launch {
                 if (prompt.recordKey.isNotEmpty()) knownHosts.remove(prompt.recordKey)
                 refreshStorage()
@@ -2631,6 +2641,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pendingHostKey?.complete(false)
             return
         }
+        // Connect/KEX uses a long host-key decision timeout so Trust can complete the same
+        // handshake. A timed-out attempt dismisses the dialog in openNewSession and surfaces
+        // CONNECTION_FAILED; the user taps the host again (trust already saved if they accepted).
         pendingHostKey?.complete(true)
     }
 

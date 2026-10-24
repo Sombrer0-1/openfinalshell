@@ -33,6 +33,8 @@ class MinaSshTransport(
 ) : SshTransport {
     private companion object {
         const val TAG = "MinaSshTransport"
+        /** Connect/KEX may block on the host-key UI; keep this longer than readyTimeout. */
+        const val HOST_KEY_DECISION_TIMEOUT_MS = 10 * 60 * 1000L
     }
 
     private val mutableState = MutableStateFlow(SessionState.CLOSED)
@@ -72,6 +74,7 @@ class MinaSshTransport(
             }
             ssh = ClientBuilder.builder()
                 .keyExchangeFactories(kexFactories)
+                .signatureFactories(AndroidSshdInitializer.signatureFactories())
                 .build()
             if (profile.options.legacyAlgorithms) SshRuntimePolicy.applyLegacy(ssh)
             if (profile.options.compress) {
@@ -95,6 +98,13 @@ class MinaSshTransport(
             ssh.start()
             mutableState.value = SessionState.AUTHENTICATING
             val timeout = ConnectionTiming.readyTimeoutMillis(profile.options.readyTimeout)
+            // Host-key TOFU may wait on a Compose dialog. Connect/KEX uses a longer budget so the
+            // readyTimeout does not abort while the user reads the fingerprint; auth stays short.
+            val connectTimeout = if (hostKeyVerifier != null) {
+                maxOf(timeout, HOST_KEY_DECISION_TIMEOUT_MS)
+            } else {
+                timeout
+            }
             val proxy = profile.proxy?.takeUnless { it.type == "none" }
             if (proxy != null) {
                 val password = proxy.passwordRef?.let { proxyPasswordResolver(it) }
@@ -102,7 +112,7 @@ class MinaSshTransport(
                 finally { password?.fill('\u0000') }
             }
             connected = ssh.connect(profile.username, if (proxyTunnel != null) "127.0.0.1" else profile.host,
-                proxyTunnel?.port ?: profile.port).verify(timeout).session
+                proxyTunnel?.port ?: profile.port).verify(connectTimeout).session
             credentials.password?.let { connected.addPasswordIdentity(String(it)) }
             // Key parsing is delegated to Apache MINA's parser so OpenSSH/PEM formats remain supported.
             credentials.privateKey?.let { keyBytes ->

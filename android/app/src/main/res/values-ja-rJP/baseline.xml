@@ -157,7 +157,7 @@
     <string name="sync_last_result">前回の同期：プロファイル %1$d 件、転送 %2$d 件、認証情報 %3$d 件、スキップ %4$d 件</string>
     <string name="sync_peer_metadata">%1$s:%2$d、バージョン %3$s</string>
     <string name="notification_channel_connections">OpenFinalShell の接続</string>
-    <string name="notification_summary">SSH：%1$d、転送：%2$d、ポート転送：%3$d</string>
+    <string name="notification_summary">セッション：%1$d、転送：%2$d、ポート転送：%3$d</string>
     <string name="notification_reopen_to_restore">OpenFinalShell を開き直すとタスクを復元できます</string>
     <string name="update_failed">更新を完了できません。</string>
 </resources>

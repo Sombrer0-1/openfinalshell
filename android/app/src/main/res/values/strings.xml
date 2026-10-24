@@ -299,7 +299,7 @@
     <string name="sync_last_result">Last sync: %1$d profiles, %2$d forwards, %3$d secrets, %4$d skipped</string>
     <string name="sync_peer_metadata">%1$s:%2$d, version %3$s</string>
     <string name="notification_channel_connections">OpenFinalShell connections</string>
-    <string name="notification_summary">SSH: %1$d, transfers: %2$d, forwards: %3$d</string>
+    <string name="notification_summary">Sessions: %1$d, transfers: %2$d, forwards: %3$d</string>
     <string name="notification_reopen_to_restore">Reopen OpenFinalShell to restore tasks</string>
     <string name="update_failed">Unable to complete the update.</string>
 </resources>

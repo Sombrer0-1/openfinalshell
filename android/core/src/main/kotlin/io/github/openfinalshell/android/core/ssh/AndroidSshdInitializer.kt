@@ -6,6 +6,9 @@ import java.security.Security
 import org.apache.sshd.client.ClientBuilder
 import org.apache.sshd.common.kex.BuiltinDHFactories
 import org.apache.sshd.common.kex.KeyExchangeFactory
+import org.apache.sshd.common.NamedFactory
+import org.apache.sshd.common.signature.BuiltinSignatures
+import org.apache.sshd.common.signature.Signature
 import org.apache.sshd.common.util.io.PathUtils
 import org.apache.sshd.common.util.security.SecurityUtils
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -31,6 +34,22 @@ object AndroidSshdInitializer {
         BuiltinDHFactories.ecdhp521,
         BuiltinDHFactories.dhg14_256,
         BuiltinDHFactories.dhg14
+    )
+
+    /**
+     * Host-key / signature algorithms offered to the peer. Modern OpenSSH defaults to
+     * ssh-ed25519; without it, negotiation fails against servers that only present Ed25519.
+     */
+    private val preferredSignatures = listOf(
+        BuiltinSignatures.ed25519,
+        BuiltinSignatures.sk_ssh_ed25519,
+        BuiltinSignatures.nistp256,
+        BuiltinSignatures.nistp384,
+        BuiltinSignatures.nistp521,
+        BuiltinSignatures.sk_ecdsa_sha2_nistp256,
+        BuiltinSignatures.rsaSHA512,
+        BuiltinSignatures.rsaSHA256,
+        BuiltinSignatures.rsa
     )
 
     @Volatile
@@ -82,6 +101,33 @@ object AndroidSshdInitializer {
         return fallback
     }
 
+    /**
+     * Signature factories used both for client auth and for negotiating server host-key
+     * algorithms. Explicitly prefer ssh-ed25519 once the EdDSA provider is registered.
+     */
+    fun signatureFactories(): List<NamedFactory<Signature>> {
+        synchronized(lock) { registerSecurityProviderLocked() }
+
+        val detected = runCatching { ClientBuilder.setUpDefaultSignatureFactories(true) }
+            .onFailure { Log.w(TAG, "MINA default signature detection failed; using portable list", it) }
+            .getOrNull()
+            .orEmpty()
+
+        val preferred = preferredSignatures.filter { factory ->
+            runCatching { factory.isSupported }.getOrDefault(false)
+        }
+        if (preferred.none { it.name == BuiltinSignatures.ed25519.name }) {
+            Log.w(TAG, "ssh-ed25519 is not supported after EdDSA registration")
+        }
+
+        // Prefer our ordered list (ed25519 first) while keeping any extras MINA detected.
+        val byName = LinkedHashMap<String, NamedFactory<Signature>>()
+        preferred.forEach { byName[it.name] = it }
+        detected.forEach { byName.putIfAbsent(it.name, it) }
+        check(byName.isNotEmpty()) { "No Android-compatible SSH signature factory is available" }
+        return byName.values.toList()
+    }
+
     private fun registerSecurityProviderLocked() {
         // Android vendors may ship a provider named "BC" that is not compatible with
         // the algorithms MINA probes (for example SHA-256 on some Xiaomi builds). Keep
@@ -98,5 +144,13 @@ object AndroidSshdInitializer {
         // Android provider and select BC only when it is actually usable.
         runCatching { SecurityUtils.isBouncyCastleRegistered() }
             .onFailure { Log.w(TAG, "MINA security provider registration failed", it) }
+
+        // net.i2p.crypto:eddsa — required for ssh-ed25519 host keys and signatures.
+        val eddsa = runCatching { SecurityUtils.isEDDSACurveSupported() }
+            .onFailure { Log.w(TAG, "EdDSA provider probe failed", it) }
+            .getOrDefault(false)
+        if (!eddsa) {
+            Log.w(TAG, "EdDSA curve is not available; ssh-ed25519 host keys will not negotiate")
+        }
     }
 }
