@@ -521,7 +521,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** True when this process still has sockets or a connect attempt. Empty after process death. */
     fun hasBackgroundWork(): Boolean {
-        val activeSessions = state.value.sessions.values.count { it.state != SessionState.CLOSED }
+        // Prefer live SshSessionManager snapshots over UI state (collector can lag).
+        val activeSessions = sessions.sessions.value.values.count { it.state != SessionState.CLOSED }
         val activeTransfers = state.value.transfers.count { task ->
             task.state == io.github.openfinalshell.android.core.sftp.TransferState.RUNNING ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
@@ -776,7 +777,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun updateBackgroundService() {
-        val activeSessions = state.value.sessions.values.count { it.state != SessionState.CLOSED }
+        // Authority for sockets is SshSessionManager, not the Compose state mirror.
+        // Using UI state here caused false STOP when finishConnectAttempt raced the collector.
+        val activeSessions = sessions.sessions.value.values.count { it.state != SessionState.CLOSED }
         val activeTransfers = state.value.transfers.count { task ->
             task.state == io.github.openfinalshell.android.core.sftp.TransferState.RUNNING ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
@@ -826,14 +829,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ConnectionForegroundService.begin(getApplication())
     }
 
-    private fun finishConnectAttempt(forceRepublish: Boolean = false) {
+    private fun finishConnectAttempt() {
         connectsInFlight = (connectsInFlight - 1).coerceAtLeast(0)
-        if (forceRepublish) {
-            // Collector may lag behind sessions.connect(); sync so hold stays true after
-            // connectsInFlight drops, and clear dedupe so FGS/notification/locks republish.
-            updateState { it.copy(sessions = sessions.sessions.value) }
-            lastPublishedKeepAlive = null
-        }
         updateBackgroundService()
     }
 
@@ -1416,18 +1413,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun reconnectSession(sessionId: String) {
         viewModelScope.launch {
             runCatching { sessions.reconnect(sessionId) }
-                .onSuccess {
-                    updateState { it.copy(sessions = sessions.sessions.value) }
-                    lastPublishedKeepAlive = null
-                    updateBackgroundService()
-                }
                 .onFailure { setStatus(readableError(it, StatusKey.CONNECTION_FAILED)) }
         }
     }
 
     private suspend fun openNewSession(profile: ConnectionProfile, password: String) {
         holdProcessForConnect()
-        var connectedOk = false
         try {
             val effectiveProfile = when {
                 profile.proxyMode == "direct" || profile.proxyMode == "none" -> profile.copy(proxy = null, proxyId = null)
@@ -1460,9 +1451,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             sessions.select(sessionId)
             updateState {
                 it.copy(
-                    // Register the live snapshot immediately so keep-alive does not STOP between
-                    // connectsInFlight-- and the sessions StateFlow collector catching up.
-                    sessions = sessions.sessions.value,
                     selectedProfileId = profile.id,
                     selectedSessionId = sessionId,
                     sessionFiles = it.sessionFiles + (sessionId to SessionFileState(confirmedPath = initialPath)),
@@ -1474,7 +1462,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     status = UiStatus(StatusKey.CONNECTED)
                 )
             }
-            connectedOk = true
             refreshStorage()
             openShell(sessionId, 80, 24)
             probeDirectLatency(profile, sessionId)
@@ -1484,7 +1471,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pendingHostKey?.complete(false)
             setStatus(readableError(error, StatusKey.CONNECTION_FAILED))
         } finally {
-            finishConnectAttempt(forceRepublish = connectedOk)
+            finishConnectAttempt()
         }
     }
 
