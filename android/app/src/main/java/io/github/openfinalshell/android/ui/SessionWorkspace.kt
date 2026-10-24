@@ -1,9 +1,13 @@
 package io.github.openfinalshell.android.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +20,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -30,10 +35,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -69,6 +77,8 @@ fun SessionWorkspace(
     settingsViewModel: SettingsViewModel,
     chrome: SessionChrome,
     wide: Boolean,
+    maskHosts: Boolean,
+    onShowConnections: () -> Unit,
     onMonitorWidth: (Int) -> Unit,
     onFileHeight: (Int) -> Unit,
     modifier: Modifier = Modifier
@@ -114,8 +124,12 @@ fun SessionWorkspace(
                 requestClose(state, ids, viewModel) { pendingClose = it }
             }
         )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
         Row(
-            Modifier.fillMaxWidth().heightIn(min = SessionLayoutLimits.TOOLBAR_DP.dp),
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = SessionLayoutLimits.TOOLBAR_DP.dp)
+                .background(MaterialTheme.colorScheme.surface),
             verticalAlignment = Alignment.CenterVertically
         ) {
             SessionToolButton(Icons.AutoMirrored.Filled.List, filesDescription, selectedId != null) {
@@ -136,10 +150,13 @@ fun SessionWorkspace(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (selectedId == null) {
-                Column(Modifier.padding(OpenFinalShellSpacing.Medium), verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)) {
-                    Text(stringResource(R.string.session_empty_title), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.session_empty_body))
-                }
+                SessionWelcome(
+                    state = state,
+                    viewModel = viewModel,
+                    maskHosts = maskHosts,
+                    wide = wide,
+                    onShowConnections = onShowConnections
+                )
             } else {
                 SessionPanes(
                     state = state,
@@ -315,22 +332,47 @@ private fun SessionTabRow(
     val actionsDescription = stringResource(R.string.cd_session_actions)
     val newDescription = stringResource(R.string.action_new_session)
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        verticalAlignment = Alignment.CenterVertically
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.Bottom
     ) {
         for ((index, session) in sessions.withIndex()) {
             val selected = session.sessionId == state.selectedSessionId
-            TextButton(
-                onClick = { onSelect(session.sessionId) },
-                modifier = Modifier.heightIn(min = SessionLayoutLimits.TOOLBAR_DP.dp)
+            val label = sessionLabel(state, session)
+            Row(
+                Modifier
+                    .height(SessionLayoutLimits.TOOLBAR_DP.dp)
+                    .width(168.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.surfaceContainerHigh
+                        else MaterialTheme.colorScheme.surface
+                    )
+                    .clickable { onSelect(session.sessionId) }
+                    .semantics { contentDescription = label },
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    Modifier
+                        .padding(start = 8.dp)
+                        .size(width = 3.dp, height = 16.dp)
+                        .background(
+                            if (session.state == SessionState.READY) OpenFinalShellColors.Success
+                            else MaterialTheme.colorScheme.outline,
+                            androidx.compose.foundation.shape.RoundedCornerShape(1.dp)
+                        )
+                )
                 Text(
-                    sessionLabel(state, session),
+                    label,
+                    modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
             Box {
                 IconButton(
                     onClick = { onMenu(session.sessionId) },
@@ -353,6 +395,7 @@ private fun SessionTabRow(
                         onClose(sessions.map { it.sessionId })
                     })
                 }
+            }
             }
         }
         IconButton(onClick = onNew, modifier = Modifier.size(SessionLayoutLimits.TOOLBAR_DP.dp)) {
@@ -496,6 +539,85 @@ private fun remainingText(transfer: io.github.openfinalshell.android.core.sftp.T
 fun SessionVerticalSplitter(description: String, onDragDp: (Float) -> Unit) {
     val density = LocalDensity.current.density
     VerticalPaneHandle(description) { pixels -> onDragDp(pixels / density) }
+}
+
+@Composable
+private fun SessionWelcome(
+    state: AndroidUiState,
+    viewModel: MainViewModel,
+    maskHosts: Boolean,
+    wide: Boolean,
+    onShowConnections: () -> Unit
+) {
+    var quick by remember { mutableStateOf("") }
+    val recent = remember(state.profiles) {
+        state.profiles.filter { it.lastUsedAt != null }.sortedByDescending { it.lastUsedAt }.take(8)
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(if (wide) OpenFinalShellSpacing.XLarge else OpenFinalShellSpacing.Medium),
+        verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Medium),
+        horizontalAlignment = if (wide) Alignment.CenterHorizontally else Alignment.Start
+    ) {
+        Column(
+            Modifier.fillMaxWidth().widthIn(max = 720.dp),
+            verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)
+        ) {
+            Text(stringResource(R.string.welcome_title), style = MaterialTheme.typography.headlineSmall)
+            Text(
+                stringResource(R.string.welcome_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = quick,
+                    onValueChange = { quick = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text(stringResource(R.string.label_quick_connect)) },
+                    placeholder = { Text(stringResource(R.string.quick_connect_placeholder)) },
+                    singleLine = true
+                )
+                Button(
+                    onClick = {
+                        viewModel.quickConnect(quick)
+                        quick = ""
+                    },
+                    enabled = quick.isNotBlank(),
+                    modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
+                ) { Text(stringResource(R.string.action_connect)) }
+            }
+            TextButton(onClick = onShowConnections, modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)) {
+                Text(stringResource(R.string.action_show_connections))
+            }
+            if (recent.isNotEmpty()) {
+                Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.titleSmall)
+                recent.forEach { profile ->
+                    val host = if (maskHosts) io.github.openfinalshell.android.core.connection.maskHost(profile.host) else profile.host
+                    val line = if (profile.protocol == io.github.openfinalshell.android.core.model.LOCAL_SHELL_PROTOCOL) {
+                        profile.name
+                    } else {
+                        "${profile.username}@$host:${profile.port}"
+                    }
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
+                            .clickable { viewModel.connect(profile) },
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Column(Modifier.padding(horizontal = OpenFinalShellSpacing.Medium, vertical = OpenFinalShellSpacing.Small)) {
+                            Text(profile.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(line, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun sessionLabel(state: AndroidUiState, snapshot: SessionSnapshot?): String {

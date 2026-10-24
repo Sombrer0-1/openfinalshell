@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_toggle_theme">테마 전환</string>
+    <string name="cd_collapse_side_panel">옆 패널 접기</string>
+    <string name="status_not_connected">연결 안 됨</string>
+    <string name="status_transfer_brief">%1$d ↓%2$s ↑%3$s</string>
+    <string name="welcome_title">OpenFinalShell</string>
+    <string name="welcome_subtitle">호스트에 연결하면 터미널이 열립니다. 창이 넓으면 파일은 터미널 아래, 모니터링은 옆에 표시됩니다.</string>
+    <string name="action_show_connections">연결 표시</string>
+    <string name="keepalive_title">백그라운드 세션</string>
+    <string name="keepalive_body">앱을 벗어나도 열린 세션은 연결을 유지하고 알림이 남습니다. 세션을 닫거나 시스템이 앱을 강제 종료할 때 연결이 끝납니다.</string>
+    <string name="keepalive_notifications">알림</string>
+    <string name="keepalive_notifications_allowed">알림 허용됨</string>
+    <string name="keepalive_notifications_action">알림 허용</string>
+    <string name="keepalive_battery">배터리 최적화</string>
+    <string name="keepalive_battery_exempt">제한 없음</string>
+    <string name="keepalive_battery_action">백그라운드 활동 허용</string>
+    <string name="keepalive_oem">일부 제조사는 백그라운드 앱을 종료합니다. 앱을 떠난 뒤 세션이 끊기면 시스템 설정에서 OpenFinalShell의 배터리 제한, 자동 시작, 백그라운드 활동을 허용하세요.</string>
+    <string name="notification_tap_to_open">OpenFinalShell 열기</string>
+</resources>

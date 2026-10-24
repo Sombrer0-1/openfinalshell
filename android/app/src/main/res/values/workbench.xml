@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_toggle_theme">Toggle theme</string>
+    <string name="cd_collapse_side_panel">Collapse side panel</string>
+    <string name="status_not_connected">Not connected</string>
+    <string name="status_transfer_brief">%1$d ↓%2$s ↑%3$s</string>
+    <string name="welcome_title">OpenFinalShell</string>
+    <string name="welcome_subtitle">Connect to a host to open a terminal. Files sit under the terminal, and monitoring sits beside it when the window is wide enough.</string>
+    <string name="action_show_connections">Show connections</string>
+    <string name="keepalive_title">Background sessions</string>
+    <string name="keepalive_body">Open sessions stay connected while this app is in the background. A notification stays visible. A session ends when you close it, or when the system force-stops the app.</string>
+    <string name="keepalive_notifications">Notifications</string>
+    <string name="keepalive_notifications_allowed">Notifications allowed</string>
+    <string name="keepalive_notifications_action">Allow notifications</string>
+    <string name="keepalive_battery">Battery optimization</string>
+    <string name="keepalive_battery_exempt">Unrestricted</string>
+    <string name="keepalive_battery_action">Allow background activity</string>
+    <string name="keepalive_oem">Some phone makers still stop background apps. If a session drops after you leave the app, allow unrestricted battery use, autostart, and background activity for OpenFinalShell in system settings.</string>
+    <string name="notification_tap_to_open">Open OpenFinalShell</string>
+</resources>

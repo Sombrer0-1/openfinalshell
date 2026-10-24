@@ -89,6 +89,7 @@ import io.github.openfinalshell.android.core.sftp.TransferTask
 import java.io.File
 import java.io.RandomAccessFile
 import io.github.openfinalshell.android.service.ConnectionForegroundService
+import io.github.openfinalshell.android.service.SessionKeepAlivePolicy
 import io.github.openfinalshell.android.core.local.LocalHostConfig
 import io.github.openfinalshell.android.core.local.LocalHostTransport
 import io.github.openfinalshell.android.core.ssh.SshTransport
@@ -135,8 +136,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
@@ -416,18 +420,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             sessions.sessions.collect { snapshot ->
                 updateState { it.copy(sessions = snapshot) }
-                val activeSessions = snapshot.values.count { it.state != SessionState.CLOSED }
-                if (activeSessions > 0) {
-                    ConnectionForegroundService.update(
-                        getApplication(),
-                        activeSessions,
-                        state.value.transfers.count { task ->
-                            task.state == io.github.openfinalshell.android.core.sftp.TransferState.RUNNING ||
-                                task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
-                                task.state == io.github.openfinalshell.android.core.sftp.TransferState.PAUSED
-                        }
-                    )
-                }
+                updateBackgroundService()
             }
         }
         viewModelScope.launch {
@@ -506,20 +499,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val live = tasks.map { it.id }.toSet()
                 transferSessions.keys.retainAll(live)
                 updateState { it.copy(transfers = tasks, transferSessions = transferSessions.toMap()) }
-                val activeSessions = state.value.sessions.values.count { it.state != SessionState.CLOSED }
-                if (activeSessions > 0) {
-                    ConnectionForegroundService.update(
-                        getApplication(),
-                        activeSessions,
-                        tasks.count { task ->
-                            task.state == io.github.openfinalshell.android.core.sftp.TransferState.RUNNING ||
-                                task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
-                                task.state == io.github.openfinalshell.android.core.sftp.TransferState.PAUSED
-                        }
-                    )
-                }
+                updateBackgroundService()
             }
         }
+    }
+
+    /** Called when the activity stops or the FGS sticky-restarts; force republish past dedupe. */
+    fun ensureBackgroundKeepAlive() {
+        // Clear lastPublished so sticky restart / onStop re-assert always reaches startForeground.
+        lastPublishedKeepAlive = null
+        updateBackgroundService()
+    }
+
+    /** True when this process still has sockets or a connect attempt. Empty after process death. */
+    fun hasBackgroundWork(): Boolean {
+        val activeSessions = state.value.sessions.values.count { it.state != SessionState.CLOSED }
+        val activeTransfers = state.value.transfers.count { task ->
+            task.state == io.github.openfinalshell.android.core.sftp.TransferState.RUNNING ||
+                task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
+                task.state == io.github.openfinalshell.android.core.sftp.TransferState.PAUSED
+        }
+        return SessionKeepAlivePolicy.shouldHoldIncludingConnects(
+            activeSessions,
+            activeTransfers,
+            forwardingHandles.size,
+            connectsInFlight
+        )
     }
 
     private suspend fun refreshProfiles() {
@@ -747,6 +752,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var keepAliveStarted = false
+    /** Last counts sent to the FGS; skip identical UPDATEs to avoid transfer IPC storms. */
+    private var lastPublishedKeepAlive: SessionKeepAlivePolicy.PublishedCounts? = null
+    private var connectsInFlight = 0
+    private var notificationPermissionPrompted = false
+    private val _requestNotificationPermission = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** One-shot signal so the UI can request POST_NOTIFICATIONS before/while FGS runs (API 33+). */
+    val requestNotificationPermission: SharedFlow<Unit> = _requestNotificationPermission.asSharedFlow()
+
+    private fun promptNotificationPermissionOnce() {
+        if (notificationPermissionPrompted) return
+        notificationPermissionPrompted = true
+        _requestNotificationPermission.tryEmit(Unit)
+    }
+
     private fun updateBackgroundService() {
         val activeSessions = state.value.sessions.values.count { it.state != SessionState.CLOSED }
         val activeTransfers = state.value.transfers.count { task ->
@@ -754,11 +774,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.PAUSED
         }
-        if (activeSessions > 0 || forwardingHandles.isNotEmpty() || activeTransfers > 0) {
-            ConnectionForegroundService.update(getApplication(), activeSessions, activeTransfers, forwardingHandles.size)
-        } else {
+        val activeForwards = forwardingHandles.size
+        val connecting = connectsInFlight > 0 && activeSessions == 0
+        val hold = SessionKeepAlivePolicy.shouldHoldIncludingConnects(
+            activeSessions,
+            activeTransfers,
+            activeForwards,
+            connectsInFlight
+        )
+        if (hold) {
+            keepAliveStarted = true
+            promptNotificationPermissionOnce()
+            val next = SessionKeepAlivePolicy.PublishedCounts(
+                sessions = activeSessions,
+                transfers = activeTransfers,
+                forwards = activeForwards,
+                connecting = connecting
+            )
+            // Counts unchanged → no startForegroundService / prefs write / notification rebuild.
+            // Transfer chunk progress fires often but does not change these counts.
+            if (!SessionKeepAlivePolicy.shouldRepublish(lastPublishedKeepAlive, next)) {
+                return
+            }
+            lastPublishedKeepAlive = next
+            ConnectionForegroundService.update(
+                getApplication(),
+                activeSessions,
+                activeTransfers,
+                activeForwards,
+                connecting = connecting
+            )
+        } else if (keepAliveStarted) {
+            keepAliveStarted = false
+            lastPublishedKeepAlive = null
             ConnectionForegroundService.stop(getApplication())
         }
+    }
+
+    private fun holdProcessForConnect() {
+        connectsInFlight++
+        keepAliveStarted = true
+        promptNotificationPermissionOnce()
+        ConnectionForegroundService.begin(getApplication())
+    }
+
+    private fun finishConnectAttempt() {
+        connectsInFlight = (connectsInFlight - 1).coerceAtLeast(0)
+        updateBackgroundService()
     }
 
     fun addProfile(name: String, host: String, port: Int, username: String, password: String = "") {
@@ -1345,6 +1407,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun openNewSession(profile: ConnectionProfile, password: String) {
+        holdProcessForConnect()
         try {
             val effectiveProfile = when {
                 profile.proxyMode == "direct" || profile.proxyMode == "none" -> profile.copy(proxy = null, proxyId = null)
@@ -1392,12 +1455,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             openShell(sessionId, 80, 24)
             probeDirectLatency(profile, sessionId)
             collectStaticInfo(sessionId)
-            ContextCompat.startForegroundService(
-                getApplication<Application>(),
-                Intent(getApplication(), ConnectionForegroundService::class.java).setAction(ConnectionForegroundService.ACTION_START)
-            )
         } catch (error: Throwable) {
             setStatus(readableError(error, StatusKey.CONNECTION_FAILED))
+        } finally {
+            finishConnectAttempt()
         }
     }
 
@@ -3250,9 +3311,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (next != null) selectSession(next)
         viewModelScope.launch {
             sessions.disconnect(sessionId)
-            if (sessions.sessions.value.values.none { it.state != SessionState.CLOSED }) {
-                ConnectionForegroundService.stop(getApplication())
-            }
+            // Do not stop the FGS just because sessions are gone — transfers / forwards /
+            // connectsInFlight must keep it alive via the same hold policy as updates.
+            updateBackgroundService()
         }
     }
 

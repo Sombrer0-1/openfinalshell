@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_toggle_theme">Changer le thème</string>
+    <string name="cd_collapse_side_panel">Réduire le panneau latéral</string>
+    <string name="status_not_connected">Non connecté</string>
+    <string name="status_transfer_brief">%1$d ↓%2$s ↑%3$s</string>
+    <string name="welcome_title">OpenFinalShell</string>
+    <string name="welcome_subtitle">Connectez-vous à un hôte pour ouvrir un terminal. Si la fenêtre est assez large, les fichiers sont sous le terminal et la supervision à côté.</string>
+    <string name="action_show_connections">Afficher les connexions</string>
+    <string name="keepalive_title">Sessions en arrière-plan</string>
+    <string name="keepalive_body">Les sessions ouvertes restent connectées lorsque l’application est en arrière-plan, avec une notification permanente. Une session se termine lorsque vous la fermez ou lorsque le système force l’arrêt de l’application.</string>
+    <string name="keepalive_notifications">Notifications</string>
+    <string name="keepalive_notifications_allowed">Notifications autorisées</string>
+    <string name="keepalive_notifications_action">Autoriser les notifications</string>
+    <string name="keepalive_battery">Optimisation de la batterie</string>
+    <string name="keepalive_battery_exempt">Sans restriction</string>
+    <string name="keepalive_battery_action">Autoriser l’activité en arrière-plan</string>
+    <string name="keepalive_oem">Certains fabricants arrêtent encore les applications en arrière-plan. Si une session tombe après avoir quitté l’application, autorisez une batterie sans restriction, le démarrage automatique et l’activité en arrière-plan pour OpenFinalShell dans les réglages système.</string>
+    <string name="notification_tap_to_open">Ouvrir OpenFinalShell</string>
+</resources>
