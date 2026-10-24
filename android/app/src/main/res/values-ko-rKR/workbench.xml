@@ -9,6 +9,9 @@
     <string name="action_show_connections">연결 표시</string>
     <string name="keepalive_title">백그라운드 세션</string>
     <string name="keepalive_body">앱을 벗어나도 열린 세션은 연결을 유지하고 알림이 남습니다. 세션을 닫거나 시스템이 앱을 강제 종료할 때 연결이 끝납니다.</string>
+    <string name="keepalive_notifications">알림</string>
+    <string name="keepalive_notifications_allowed">알림 허용됨</string>
+    <string name="keepalive_notifications_action">알림 허용</string>
     <string name="keepalive_battery">배터리 최적화</string>
     <string name="keepalive_battery_exempt">제한 없음</string>
     <string name="keepalive_battery_action">백그라운드 활동 허용</string>

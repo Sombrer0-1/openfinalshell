@@ -9,6 +9,9 @@
     <string name="action_show_connections">Show connections</string>
     <string name="keepalive_title">Background sessions</string>
     <string name="keepalive_body">Open sessions stay connected while this app is in the background. A notification stays visible. A session ends when you close it, or when the system force-stops the app.</string>
+    <string name="keepalive_notifications">Notifications</string>
+    <string name="keepalive_notifications_allowed">Notifications allowed</string>
+    <string name="keepalive_notifications_action">Allow notifications</string>
     <string name="keepalive_battery">Battery optimization</string>
     <string name="keepalive_battery_exempt">Unrestricted</string>
     <string name="keepalive_battery_action">Allow background activity</string>

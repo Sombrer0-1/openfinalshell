@@ -9,6 +9,9 @@
     <string name="action_show_connections">接続を表示</string>
     <string name="keepalive_title">バックグラウンドのセッション</string>
     <string name="keepalive_body">アプリを離れても開いているセッションは接続を維持し、通知が残ります。セッションを閉じるか、システムがアプリを強制停止したときに接続は終わります。</string>
+    <string name="keepalive_notifications">通知</string>
+    <string name="keepalive_notifications_allowed">通知は許可済み</string>
+    <string name="keepalive_notifications_action">通知を許可</string>
     <string name="keepalive_battery">バッテリー最適化</string>
     <string name="keepalive_battery_exempt">制限なし</string>
     <string name="keepalive_battery_action">バックグラウンドを許可</string>

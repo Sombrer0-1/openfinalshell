@@ -89,6 +89,7 @@ import io.github.openfinalshell.android.core.sftp.TransferTask
 import java.io.File
 import java.io.RandomAccessFile
 import io.github.openfinalshell.android.service.ConnectionForegroundService
+import io.github.openfinalshell.android.service.SessionKeepAlivePolicy
 import io.github.openfinalshell.android.core.local.LocalHostConfig
 import io.github.openfinalshell.android.core.local.LocalHostTransport
 import io.github.openfinalshell.android.core.ssh.SshTransport
@@ -135,8 +136,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
@@ -513,7 +517,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.PAUSED
         }
-        return activeSessions > 0 || activeTransfers > 0 || forwardingHandles.isNotEmpty() || connectsInFlight > 0
+        return SessionKeepAlivePolicy.shouldHoldIncludingConnects(
+            activeSessions,
+            activeTransfers,
+            forwardingHandles.size,
+            connectsInFlight
+        )
     }
 
     private suspend fun refreshProfiles() {
@@ -743,6 +752,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var keepAliveStarted = false
     private var connectsInFlight = 0
+    private var notificationPermissionPrompted = false
+    private val _requestNotificationPermission = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** One-shot signal so the UI can request POST_NOTIFICATIONS before/while FGS runs (API 33+). */
+    val requestNotificationPermission: SharedFlow<Unit> = _requestNotificationPermission.asSharedFlow()
+
+    private fun promptNotificationPermissionOnce() {
+        if (notificationPermissionPrompted) return
+        notificationPermissionPrompted = true
+        _requestNotificationPermission.tryEmit(Unit)
+    }
 
     private fun updateBackgroundService() {
         val activeSessions = state.value.sessions.values.count { it.state != SessionState.CLOSED }
@@ -751,9 +770,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.PAUSED
         }
-        val hold = activeSessions > 0 || forwardingHandles.isNotEmpty() || activeTransfers > 0 || connectsInFlight > 0
+        val hold = SessionKeepAlivePolicy.shouldHoldIncludingConnects(
+            activeSessions,
+            activeTransfers,
+            forwardingHandles.size,
+            connectsInFlight
+        )
         if (hold) {
             keepAliveStarted = true
+            promptNotificationPermissionOnce()
             ConnectionForegroundService.update(
                 getApplication(),
                 activeSessions,
@@ -770,6 +795,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun holdProcessForConnect() {
         connectsInFlight++
         keepAliveStarted = true
+        promptNotificationPermissionOnce()
         ConnectionForegroundService.begin(getApplication())
     }
 
@@ -3266,9 +3292,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (next != null) selectSession(next)
         viewModelScope.launch {
             sessions.disconnect(sessionId)
-            if (sessions.sessions.value.values.none { it.state != SessionState.CLOSED }) {
-                ConnectionForegroundService.stop(getApplication())
-            }
+            // Do not stop the FGS just because sessions are gone — transfers / forwards /
+            // connectsInFlight must keep it alive via the same hold policy as updates.
+            updateBackgroundService()
         }
     }
 

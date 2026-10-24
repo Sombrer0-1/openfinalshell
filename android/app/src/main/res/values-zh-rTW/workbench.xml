@@ -9,6 +9,9 @@
     <string name="action_show_connections">顯示連線</string>
     <string name="keepalive_title">背景工作階段</string>
     <string name="keepalive_body">離開應用程式後，已開啟的工作階段會保持連線，並顯示一則常駐通知。只有你關閉工作階段，或系統強制停止應用程式時，連線才會結束。</string>
+    <string name="keepalive_notifications">通知</string>
+    <string name="keepalive_notifications_allowed">已允許通知</string>
+    <string name="keepalive_notifications_action">允許通知</string>
     <string name="keepalive_battery">電池最佳化</string>
     <string name="keepalive_battery_exempt">不受限制</string>
     <string name="keepalive_battery_action">允許背景活動</string>

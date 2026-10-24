@@ -9,6 +9,9 @@
     <string name="action_show_connections">Afficher les connexions</string>
     <string name="keepalive_title">Sessions en arrière-plan</string>
     <string name="keepalive_body">Les sessions ouvertes restent connectées lorsque l’application est en arrière-plan, avec une notification permanente. Une session se termine lorsque vous la fermez ou lorsque le système force l’arrêt de l’application.</string>
+    <string name="keepalive_notifications">Notifications</string>
+    <string name="keepalive_notifications_allowed">Notifications autorisées</string>
+    <string name="keepalive_notifications_action">Autoriser les notifications</string>
     <string name="keepalive_battery">Optimisation de la batterie</string>
     <string name="keepalive_battery_exempt">Sans restriction</string>
     <string name="keepalive_battery_action">Autoriser l’activité en arrière-plan</string>

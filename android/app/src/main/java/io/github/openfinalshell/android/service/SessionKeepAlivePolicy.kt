@@ -11,6 +11,25 @@ object SessionKeepAlivePolicy {
         openSessions > 0 || activeTransfers > 0 || activeForwards > 0
 
     /**
+     * Same as [shouldHold], plus an in-flight connect handshake that has not yet produced a
+     * counted session.
+     */
+    fun shouldHoldIncludingConnects(
+        openSessions: Int,
+        activeTransfers: Int,
+        activeForwards: Int,
+        connectsInFlight: Int
+    ): Boolean =
+        connectsInFlight > 0 || shouldHold(openSessions, activeTransfers, activeForwards)
+
+    /**
+     * Only an UPDATE intent may write session/transfer/forward counts into prefs.
+     * A START/begin intent must leave existing counts alone so a second connect during an open
+     * session does not wipe the notification to zeros.
+     */
+    fun shouldPersistCounts(isUpdateAction: Boolean): Boolean = isUpdateAction
+
+    /**
      * A null start intent means Android recreated the process. The TCP sessions are gone.
      * [connecting] keeps the process up during the handshake, before a session is counted.
      */

@@ -9,6 +9,9 @@
     <string name="action_show_connections">Verbindungen anzeigen</string>
     <string name="keepalive_title">Sitzungen im Hintergrund</string>
     <string name="keepalive_body">Offene Sitzungen bleiben verbunden, während die App im Hintergrund ist, und eine Benachrichtigung bleibt sichtbar. Eine Sitzung endet, wenn Sie sie schließen oder das System die App beendet.</string>
+    <string name="keepalive_notifications">Benachrichtigungen</string>
+    <string name="keepalive_notifications_allowed">Benachrichtigungen erlaubt</string>
+    <string name="keepalive_notifications_action">Benachrichtigungen erlauben</string>
     <string name="keepalive_battery">Akkuoptimierung</string>
     <string name="keepalive_battery_exempt">Uneingeschränkt</string>
     <string name="keepalive_battery_action">Hintergrundaktivität erlauben</string>

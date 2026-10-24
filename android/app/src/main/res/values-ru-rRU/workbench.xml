@@ -9,6 +9,9 @@
     <string name="action_show_connections">Показать подключения</string>
     <string name="keepalive_title">Фоновые сеансы</string>
     <string name="keepalive_body">Открытые сеансы остаются подключёнными, когда приложение в фоне, и показывают постоянное уведомление. Сеанс завершается, когда вы его закрываете или система принудительно останавливает приложение.</string>
+    <string name="keepalive_notifications">Уведомления</string>
+    <string name="keepalive_notifications_allowed">Уведомления разрешены</string>
+    <string name="keepalive_notifications_action">Разрешить уведомления</string>
     <string name="keepalive_battery">Оптимизация батареи</string>
     <string name="keepalive_battery_exempt">Без ограничений</string>
     <string name="keepalive_battery_action">Разрешить фоновую работу</string>

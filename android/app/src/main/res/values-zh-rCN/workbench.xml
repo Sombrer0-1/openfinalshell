@@ -9,6 +9,9 @@
     <string name="action_show_connections">显示连接</string>
     <string name="keepalive_title">后台会话</string>
     <string name="keepalive_body">离开应用后，已打开的会话保持连接，并显示一条常驻通知。只有你关闭会话，或系统强制停止应用时，连接才会结束。</string>
+    <string name="keepalive_notifications">通知</string>
+    <string name="keepalive_notifications_allowed">已允许通知</string>
+    <string name="keepalive_notifications_action">允许通知</string>
     <string name="keepalive_battery">电池优化</string>
     <string name="keepalive_battery_exempt">不受限制</string>
     <string name="keepalive_battery_action">允许后台活动</string>

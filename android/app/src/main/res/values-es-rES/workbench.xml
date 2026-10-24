@@ -9,6 +9,9 @@
     <string name="action_show_connections">Mostrar conexiones</string>
     <string name="keepalive_title">Sesiones en segundo plano</string>
     <string name="keepalive_body">Las sesiones abiertas siguen conectadas cuando la aplicación está en segundo plano y muestran una notificación fija. Una sesión termina cuando la cierras o cuando el sistema fuerza el cierre de la aplicación.</string>
+    <string name="keepalive_notifications">Notificaciones</string>
+    <string name="keepalive_notifications_allowed">Notificaciones permitidas</string>
+    <string name="keepalive_notifications_action">Permitir notificaciones</string>
     <string name="keepalive_battery">Optimización de batería</string>
     <string name="keepalive_battery_exempt">Sin restricciones</string>
     <string name="keepalive_battery_action">Permitir actividad en segundo plano</string>

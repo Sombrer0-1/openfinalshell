@@ -1,6 +1,10 @@
 package io.github.openfinalshell.android
 
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -194,6 +198,22 @@ fun OpenFinalShellApp(
         } else {
             installAfterPermission = true
             updatePermissionLauncher.launch(settingsViewModel.installPermissionIntent())
+        }
+    }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* Denied is fine: FGS still starts; OEM may hide the notification. */ }
+    LaunchedEffect(Unit) {
+        viewModel.requestNotificationPermission.collect {
+            if (Build.VERSION.SDK_INT < 33) return@collect
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 
@@ -1802,11 +1822,28 @@ private fun KeepAliveSettings() {
     val context = LocalContext.current
     val power = context.getSystemService(android.os.PowerManager::class.java)
     var exempt by remember { mutableStateOf(power.isIgnoringBatteryOptimizations(context.packageName)) }
+    var notificationsAllowed by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        notificationsAllowed = Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+    }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 exempt = power.isIgnoringBatteryOptimizations(context.packageName)
+                notificationsAllowed = Build.VERSION.SDK_INT < 33 ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1817,6 +1854,22 @@ private fun KeepAliveSettings() {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+    Text(
+        androidx.compose.ui.res.stringResource(
+            if (notificationsAllowed) R.string.keepalive_notifications_allowed else R.string.keepalive_notifications
+        ),
+        style = MaterialTheme.typography.labelLarge
+    )
+    if (!notificationsAllowed) {
+        Button(
+            onClick = {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
+            modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
+        ) { Text(androidx.compose.ui.res.stringResource(R.string.keepalive_notifications_action)) }
+    }
     Text(
         androidx.compose.ui.res.stringResource(if (exempt) R.string.keepalive_battery_exempt else R.string.keepalive_battery),
         style = MaterialTheme.typography.labelLarge

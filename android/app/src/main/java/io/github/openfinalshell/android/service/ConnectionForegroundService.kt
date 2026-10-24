@@ -10,7 +10,9 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -33,6 +35,15 @@ class ConnectionForegroundService : Service() {
     private var stopRequested = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private val lockHandler = Handler(Looper.getMainLooper())
+    private val renewLocks = Runnable {
+        if (stopRequested) return@Runnable
+        // Re-arm before the previous WakeLock timeout elapses. WifiLock has no timed acquire API,
+        // so drop and take again on the same cadence so a leaked service cannot hold the radio
+        // forever without renewing.
+        acquireLocks(renew = true)
+        scheduleLockRenew()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -62,9 +73,11 @@ class ConnectionForegroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_UPDATE || intent?.action == ACTION_START) {
+        // UPDATE writes provided counts. START/begin must not overwrite them — begin() has no
+        // extras, and defaulting to 0 would wipe live session counts during a second connect.
+        if (SessionKeepAlivePolicy.shouldPersistCounts(intent?.action == ACTION_UPDATE)) {
             getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_SESSIONS, intent.getIntExtra(EXTRA_SESSIONS, 0))
+                .putInt(KEY_SESSIONS, intent!!.getIntExtra(EXTRA_SESSIONS, 0))
                 .putInt(KEY_TRANSFERS, intent.getIntExtra(EXTRA_TRANSFERS, 0))
                 .putInt(KEY_FORWARDS, intent.getIntExtra(EXTRA_FORWARDS, 0))
                 .apply()
@@ -85,7 +98,8 @@ class ConnectionForegroundService : Service() {
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         startInForeground(notification(holding = true, connecting = connecting))
-        acquireLocks()
+        acquireLocks(renew = false)
+        scheduleLockRenew()
         return START_STICKY
     }
 
@@ -126,13 +140,20 @@ class ConnectionForegroundService : Service() {
         }
     }
 
-    private fun acquireLocks() {
+    /**
+     * WakeLock uses a timed acquire so a missed stop cannot hold the CPU forever; we renew while
+     * the service still needs to run. WifiLock has no timed acquire — renew by release+acquire on
+     * the same cadence, and always release in [releaseLocks]/[onDestroy].
+     */
+    private fun acquireLocks(renew: Boolean) {
         if (wakeLock?.isHeld != true) {
             val power = getSystemService(PowerManager::class.java)
             wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "openfinalshell:ssh").apply {
                 setReferenceCounted(false)
-                acquire()
+                acquire(LOCK_TIMEOUT_MS)
             }
+        } else if (renew) {
+            wakeLock?.acquire(LOCK_TIMEOUT_MS)
         }
         if (wifiLock?.isHeld != true) {
             val wifi = applicationContext.getSystemService(WifiManager::class.java) ?: return
@@ -146,10 +167,22 @@ class ConnectionForegroundService : Service() {
                 setReferenceCounted(false)
                 acquire()
             }
+        } else if (renew) {
+            runCatching {
+                wifiLock?.release()
+                wifiLock?.acquire()
+            }
         }
     }
 
+    private fun scheduleLockRenew() {
+        lockHandler.removeCallbacks(renewLocks)
+        // Renew at half the WakeLock timeout so the previous acquire does not expire first.
+        lockHandler.postDelayed(renewLocks, LOCK_TIMEOUT_MS / 2)
+    }
+
     private fun releaseLocks() {
+        lockHandler.removeCallbacks(renewLocks)
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null
         runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }
@@ -231,6 +264,8 @@ class ConnectionForegroundService : Service() {
         private const val KEY_SESSIONS = "sessions"
         private const val KEY_TRANSFERS = "transfers"
         private const val KEY_FORWARDS = "forwards"
+        /** Caps a single WakeLock hold if stop/onDestroy never runs; renewed while the service holds. */
+        private const val LOCK_TIMEOUT_MS = 10 * 60 * 1000L
 
         fun begin(context: Context) {
             val intent = Intent(context, ConnectionForegroundService::class.java).setAction(ACTION_START)
