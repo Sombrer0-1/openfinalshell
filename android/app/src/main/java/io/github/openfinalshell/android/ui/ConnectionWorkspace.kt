@@ -205,8 +205,11 @@ fun ConnectionWorkspace(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().imePadding(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(OpenFinalShellSpacing.Large),
-        verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = OpenFinalShellSpacing.Small,
+            vertical = OpenFinalShellSpacing.Small
+        ),
+        verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.XSmall)
     ) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -231,11 +234,15 @@ fun ConnectionWorkspace(
             )
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedTextField(
                     value = quickInput,
                     onValueChange = { quickInput = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                     label = { Text(stringResource(R.string.label_quick_connect)) },
                     placeholder = { Text(stringResource(R.string.quick_connect_placeholder)) },
                     singleLine = true
@@ -247,7 +254,7 @@ fun ConnectionWorkspace(
                         if (parsed != null) quickInput = ""
                     },
                     enabled = quickInput.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
+                    modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
                 ) { Text(stringResource(R.string.action_connect)) }
             }
         }
@@ -569,81 +576,79 @@ private fun ConnectionRow(
 ) {
     var menu by remember { mutableStateOf(false) }
     val local = profile.protocol == LOCAL_SHELL_PROTOCOL
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = OpenFinalShellSpacing.Large * depth)
-            .heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
-            .clickable(role = Role.Button, onClick = onSelect),
-        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Column(Modifier.fillMaxWidth().padding(OpenFinalShellSpacing.Medium), verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.XSmall)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)) {
-                        profile.color?.let { hex ->
-                            parseHexColor(hex)?.let { color ->
-                                val description = accentColorLabel(hex)
-                                Box(
-                                    Modifier
-                                        .size(12.dp)
-                                        .clip(CircleShape)
-                                        .background(color)
-                                        .semantics { contentDescription = description }
-                                )
-                            }
-                        }
-                        Text(profile.name, style = MaterialTheme.typography.titleSmall)
-                        val flag = profile.flag
-                        if (!flag.isNullOrBlank()) {
-                            Text(flag, style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                    if (local) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.small) {
-                                Text(
-                                    stringResource(R.string.local_badge),
-                                    Modifier.padding(horizontal = OpenFinalShellSpacing.Small, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                            LocalTierChip(resolution)
-                        }
-                        LocalBlockerNote(resolution, viewModel)
-                    } else {
-                        val hostText = if (maskHosts) maskHost(profile.host) else profile.host
-                        Text("${profile.username}@$hostText:${profile.port}", style = MaterialTheme.typography.bodyMedium, maxLines = 2)
-                    }
+    val sessionDescription = session?.let { sessionStateText(it.state) }
+    Column(Modifier.fillMaxWidth().padding(start = (12 * depth).dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
+                .clip(MaterialTheme.shapes.small)
+                .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
+                .clickable(role = Role.Button, onClick = {
+                    onSelect()
+                    onConnect()
+                })
+                .padding(horizontal = OpenFinalShellSpacing.Small),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            profile.color?.let { hex ->
+                parseHexColor(hex)?.let { color ->
+                    val description = accentColorLabel(hex)
+                    Box(
+                        Modifier
+                            .padding(end = OpenFinalShellSpacing.Small)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .semantics { contentDescription = description }
+                    )
                 }
-                Button(
-                    onClick = onConnect,
-                    modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
-                ) { Text(stringResource(R.string.action_connect)) }
-                Box {
-                    IconButton(onClick = { menu = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_connection_actions))
-                    }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        MenuAction(R.string.action_connect) { menu = false; onConnect() }
-                        if (!local || localEnabled) MenuAction(R.string.action_edit) { menu = false; onEdit() }
-                        MenuAction(R.string.action_duplicate_connection) { menu = false; onDuplicate() }
-                        if (!local) MenuAction(R.string.action_copy_ssh) { menu = false; onCopySsh() }
-                        MenuAction(R.string.action_delete, destructive = true) { menu = false; onDelete() }
-                    }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.XSmall)) {
+                    Text(profile.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    val flag = profile.flag
+                    if (!flag.isNullOrBlank()) Text(flag, style = MaterialTheme.typography.labelSmall)
+                }
+                if (local) {
+                    Text(stringResource(R.string.local_badge), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                } else {
+                    val hostText = if (maskHosts) maskHost(profile.host) else profile.host
+                    Text(
+                        "${profile.username}@$hostText:${profile.port}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
                 }
             }
             session?.let {
-                Surface(
-                    color = if (it.state == SessionState.READY) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text(sessionStateText(it.state), Modifier.padding(horizontal = OpenFinalShellSpacing.Small, vertical = OpenFinalShellSpacing.XSmall), style = MaterialTheme.typography.labelMedium)
+                Box(
+                    Modifier
+                        .padding(horizontal = OpenFinalShellSpacing.Small)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (it.state == SessionState.READY) OpenFinalShellColors.Success else MaterialTheme.colorScheme.outline)
+                        .semantics { contentDescription = sessionDescription.orEmpty() }
+                )
+            }
+            Box {
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(OpenFinalShellSpacing.MinimumTouchTarget)) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_connection_actions))
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    MenuAction(R.string.action_connect) { menu = false; onConnect() }
+                    if (!local || localEnabled) MenuAction(R.string.action_edit) { menu = false; onEdit() }
+                    MenuAction(R.string.action_duplicate_connection) { menu = false; onDuplicate() }
+                    if (!local) MenuAction(R.string.action_copy_ssh) { menu = false; onCopySsh() }
+                    MenuAction(R.string.action_delete, destructive = true) { menu = false; onDelete() }
                 }
             }
+        }
+        if (local) {
+            LocalTierChip(resolution)
+            LocalBlockerNote(resolution, viewModel)
         }
     }
 }

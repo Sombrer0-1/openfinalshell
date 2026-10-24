@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_toggle_theme">切换主题</string>
+    <string name="cd_collapse_side_panel">收起侧栏</string>
+    <string name="status_not_connected">未连接</string>
+    <string name="status_transfer_brief">%1$d ↓%2$s ↑%3$s</string>
+    <string name="welcome_title">OpenFinalShell</string>
+    <string name="welcome_subtitle">连接到主机后打开终端。窗口足够宽时，文件在终端下方，监控在旁边。</string>
+    <string name="action_show_connections">显示连接</string>
+    <string name="keepalive_title">后台会话</string>
+    <string name="keepalive_body">离开应用后，已打开的会话保持连接，并显示一条常驻通知。只有你关闭会话，或系统强制停止应用时，连接才会结束。</string>
+    <string name="keepalive_battery">电池优化</string>
+    <string name="keepalive_battery_exempt">不受限制</string>
+    <string name="keepalive_battery_action">允许后台活动</string>
+    <string name="keepalive_oem">部分手机会在后台结束应用。如果离开应用后会话断开，请在系统设置里为 OpenFinalShell 允许不受限制的电池、自启动和后台活动。</string>
+    <string name="notification_tap_to_open">打开 OpenFinalShell</string>
+</resources>

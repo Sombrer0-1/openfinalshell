@@ -21,7 +21,25 @@ object SessionLayoutLimits {
     const val FILE_MIN_HEIGHT_DP = 160
     const val TOOLBAR_DP = 48
     const val SPLITTER_DP = 8
-    const val RAIL_DP = 80
+    /** Matches the desktop activity bar (48px). Items inside are 48dp so the rail stays touch-sized. */
+    const val RAIL_DP = 48
+    const val TITLE_DP = 40
+    const val STATUS_DP = 28
+}
+
+/** Phone uses the bottom bar. At the desktop navigation break the activity bar and side panel take over. */
+enum class WorkbenchFormFactor { PHONE, TABLET }
+
+fun workbenchFormFactor(widthDp: Int): WorkbenchFormFactor =
+    if (widthDp >= SessionLayoutLimits.NAV_BREAK_DP) WorkbenchFormFactor.TABLET else WorkbenchFormFactor.PHONE
+
+/** Activity-bar theme button: dark and light swap; system picks the opposite of what is on screen. */
+object WorkbenchTheme {
+    fun next(stored: String, resolvedDark: Boolean): String = when (stored) {
+        "dark" -> "light"
+        "light" -> "dark"
+        else -> if (resolvedDark) "light" else "dark"
+    }
 }
 
 /**

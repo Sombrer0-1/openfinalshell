@@ -29,7 +29,7 @@ class SessionLayoutTest {
     }
 
     @Test
-    fun `a 600 dp window drops the monitor and then the side pane`() {
+    fun `the 600 dp break keeps the side pane and overlays the monitor`() {
         val chrome = resolveSessionChrome(
             widthDp = 600,
             heightDp = 800,
@@ -42,8 +42,36 @@ class SessionLayoutTest {
             wide = true
         )
 
+        assertTrue(chrome.showSidePane)
+        assertEquals(SessionPanelMode.OVERLAY, chrome.monitorMode)
+        assertEquals(WorkbenchFormFactor.TABLET, workbenchFormFactor(600))
+        assertEquals(WorkbenchFormFactor.PHONE, workbenchFormFactor(599))
+    }
+
+    @Test
+    fun `a window that cannot hold the side pane drops it after the monitor`() {
+        val chrome = resolveSessionChrome(
+            widthDp = 560,
+            heightDp = 800,
+            connectionWidthDp = 280,
+            monitorWidthDp = 280,
+            fileHeightDp = 240,
+            filesOpen = false,
+            monitorOpen = true,
+            sideRequested = true,
+            wide = true
+        )
+
         assertFalse(chrome.showSidePane)
         assertEquals(SessionPanelMode.OVERLAY, chrome.monitorMode)
+    }
+
+    @Test
+    fun `theme toggle leaves system mode for an explicit opposite`() {
+        assertEquals("light", WorkbenchTheme.next("dark", resolvedDark = true))
+        assertEquals("dark", WorkbenchTheme.next("light", resolvedDark = false))
+        assertEquals("light", WorkbenchTheme.next("system", resolvedDark = true))
+        assertEquals("dark", WorkbenchTheme.next("system", resolvedDark = false))
     }
 
     @Test

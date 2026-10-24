@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_toggle_theme">テーマを切り替える</string>
+    <string name="cd_collapse_side_panel">サイドパネルを折りたたむ</string>
+    <string name="status_not_connected">未接続</string>
+    <string name="status_transfer_brief">%1$d ↓%2$s ↑%3$s</string>
+    <string name="welcome_title">OpenFinalShell</string>
+    <string name="welcome_subtitle">ホストに接続するとターミナルが開きます。ウィンドウが広いときは、ファイルはターミナルの下、監視はその横に表示されます。</string>
+    <string name="action_show_connections">接続を表示</string>
+    <string name="keepalive_title">バックグラウンドのセッション</string>
+    <string name="keepalive_body">アプリを離れても開いているセッションは接続を維持し、通知が残ります。セッションを閉じるか、システムがアプリを強制停止したときに接続は終わります。</string>
+    <string name="keepalive_battery">バッテリー最適化</string>
+    <string name="keepalive_battery_exempt">制限なし</string>
+    <string name="keepalive_battery_action">バックグラウンドを許可</string>
+    <string name="keepalive_oem">一部のメーカーはバックグラウンドのアプリを停止します。離れたあとにセッションが切れる場合は、システムの設定で OpenFinalShell の電池制限、自動起動、バックグラウンド動作を許可してください。</string>
+    <string name="notification_tap_to_open">OpenFinalShell を開く</string>
+</resources>

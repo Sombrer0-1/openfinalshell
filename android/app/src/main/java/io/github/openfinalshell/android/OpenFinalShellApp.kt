@@ -66,8 +66,6 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -76,7 +74,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -136,6 +133,12 @@ import io.github.openfinalshell.android.ui.KnownHostSettingsContent
 import io.github.openfinalshell.android.ui.OpenFinalShellTheme
 import io.github.openfinalshell.android.ui.PrivateKeyReferenceText
 import io.github.openfinalshell.android.ui.ProxySettingsContent
+import io.github.openfinalshell.android.ui.SidePanelHeading
+import io.github.openfinalshell.android.ui.WorkbenchActivityBar
+import io.github.openfinalshell.android.ui.WorkbenchDialog
+import io.github.openfinalshell.android.ui.WorkbenchStatusBar
+import io.github.openfinalshell.android.ui.WorkbenchTheme
+import io.github.openfinalshell.android.ui.WorkbenchTitleStrip
 import io.github.openfinalshell.android.ui.OpenFinalShellSpacing
 import io.github.openfinalshell.android.ui.OpenFinalShellShapes
 import io.github.openfinalshell.android.ui.OpenFinalShellTerminalTokens
@@ -174,6 +177,8 @@ fun OpenFinalShellApp(
     val snackbarHost = remember { SnackbarHostState() }
     val statusText = uiStatusText(state.status)
     var destinationKey by rememberSaveable { mutableStateOf(AppDestination.CONNECTIONS.key) }
+    var sideCollapsed by rememberSaveable { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var showMore by rememberSaveable { mutableStateOf(false) }
     var deferredUpdateTag by rememberSaveable { mutableStateOf<String?>(null) }
     var installAfterPermission by rememberSaveable { mutableStateOf(false) }
@@ -266,9 +271,9 @@ fun OpenFinalShellApp(
         .getOrDefault(Color(0xFF1677FF))
     OpenFinalShellTheme(
         darkTheme = darkTheme,
-        // Material You supplies device-aware surfaces on API 31+, while the
-        // theme keeps a deterministic fallback on API 26-30.
-        dynamicColor = true,
+        // Desktop paints neutral surfaces and reserves the accent for selection.
+        // Material You would retint those surfaces per device and break that hierarchy.
+        dynamicColor = false,
         accentColor = primary
     ) {
         io.github.openfinalshell.android.transfer.PortTransferDialogs(viewModel)
@@ -287,51 +292,64 @@ fun OpenFinalShellApp(
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wideLayout = maxWidth >= SessionLayoutLimits.NAV_BREAK_DP.dp
             val destination = AppDestination.fromKey(destinationKey)
+            val showPhoneTitle = !wideLayout && destination != AppDestination.SESSION
             val moreSelected = destination == AppDestination.SYNC || destination == AppDestination.SETTINGS ||
                 (!wideLayout && (destination == AppDestination.FORWARDS || destination == AppDestination.TRANSFERS))
+            val selectSide: (AppDestination) -> Unit = { next ->
+                if (destination == next) sideCollapsed = !sideCollapsed
+                else {
+                    destinationKey = next.key
+                    sideCollapsed = false
+                }
+            }
+            var seenSession by remember { mutableStateOf(state.selectedSessionId) }
+            LaunchedEffect(state.selectedSessionId, wideLayout) {
+                val id = state.selectedSessionId
+                if (!wideLayout && id != null && id != seenSession && destination == AppDestination.CONNECTIONS) {
+                    destinationKey = AppDestination.SESSION.key
+                }
+                seenSession = id
+            }
+            LaunchedEffect(state.quickConnectDraft) {
+                if (state.quickConnectDraft != null) {
+                    destinationKey = AppDestination.CONNECTIONS.key
+                    sideCollapsed = false
+                }
+            }
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
-                // Consume status/navigation insets at the shell boundary. Child
-                // lists can then add IME padding without drawing underneath the
-                // bottom navigation or gesture area.
-                contentWindowInsets = WindowInsets.safeDrawing,
+                // The title strip consumes the status bar when it is visible.
+                // Otherwise the content keeps that inset. The bottom bar owns
+                // the navigation inset so lists can add IME padding safely.
+                contentWindowInsets = if (showPhoneTitle) {
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                } else {
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                },
                 topBar = {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(androidx.compose.ui.res.stringResource(destination.titleRes))
-                                if (destination == AppDestination.SESSION || wideLayout) {
-                                    val selected = state.selectedSessionId?.let { state.sessions[it] }
-                                    selected?.profile?.let { profile ->
-                                        val hostLabel = if (settingsState.settings.maskHosts) maskHost(profile.host) else profile.host
-                                        Text(
-                                            // A local session has no user@host — "shell@localhost" would
-                                            // name a server the user never entered, so it shows the name
-                                            // they gave it instead.
-                                            text = if (profile.protocol == LOCAL_SHELL_PROTOCOL) {
-                                                profile.name
-                                            } else {
-                                                "${profile.username}@$hostLabel"
-                                            },
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    )
+                    if (showPhoneTitle) {
+                        WorkbenchTitleStrip(androidx.compose.ui.res.stringResource(destination.titleRes))
+                    }
                 },
                 bottomBar = {
-                    if (!wideLayout) {
-                        MainNavigationBar(
-                            destination = destination,
-                            moreSelected = moreSelected,
-                            transferCount = activeTransferCount(state),
-                            onDestination = { destinationKey = it.key },
-                            onMore = { showMore = true }
+                    Column(Modifier.navigationBarsPadding()) {
+                        WorkbenchStatusBar(
+                            state = state,
+                            maskHosts = settingsState.settings.maskHosts,
+                            onOpenTransfers = {
+                                destinationKey = AppDestination.TRANSFERS.key
+                                sideCollapsed = false
+                            }
                         )
+                        if (!wideLayout) {
+                            MainNavigationBar(
+                                destination = destination,
+                                moreSelected = moreSelected,
+                                transferCount = activeTransferCount(state),
+                                onDestination = { destinationKey = it.key },
+                                onMore = { showMore = true }
+                            )
+                        }
                     }
                 },
                 snackbarHost = { SnackbarHost(snackbarHost) }
@@ -339,22 +357,40 @@ fun OpenFinalShellApp(
                 Row(
                     Modifier
                         .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
                         .padding(padding)
                         .consumeWindowInsets(padding)
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 ) {
                     if (wideLayout) {
-                        MainNavigationRail(
-                            destination = destination,
-                            moreSelected = destination == AppDestination.SYNC || destination == AppDestination.SETTINGS,
+                        WorkbenchActivityBar(
+                            connectionsSelected = !sideCollapsed && destination == AppDestination.CONNECTIONS,
+                            commandsSelected = !sideCollapsed && destination == AppDestination.COMMANDS,
+                            forwardsSelected = !sideCollapsed && destination == AppDestination.FORWARDS,
+                            transfersSelected = !sideCollapsed && destination == AppDestination.TRANSFERS,
                             transferCount = activeTransferCount(state),
-                            onDestination = { destinationKey = it.key },
-                            onMore = { showMore = true }
+                            onConnections = { selectSide(AppDestination.CONNECTIONS) },
+                            onCommands = { selectSide(AppDestination.COMMANDS) },
+                            onForwards = { selectSide(AppDestination.FORWARDS) },
+                            onTransfers = { selectSide(AppDestination.TRANSFERS) },
+                            onToggleTheme = {
+                                settingsViewModel.setTheme(
+                                    WorkbenchTheme.next(settingsState.settings.theme, darkTheme)
+                                )
+                            },
+                            onSettings = { settingsOpen = true }
+                        )
+                        Box(
+                            Modifier
+                                .width(1.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
                         )
                     }
                     AppDestinationBody(
                         modifier = Modifier.fillMaxSize().weight(1f).imePadding(),
                         wideLayout = wideLayout,
+                        sideCollapsed = sideCollapsed,
                         destination = destination,
                         state = state,
                         viewModel = viewModel,
@@ -364,8 +400,34 @@ fun OpenFinalShellApp(
                         lanSyncViewModel = lanSyncViewModel,
                         snackbarHost = snackbarHost,
                         requestUpdateInstall = requestUpdateInstall,
-                        onCollapseSide = { destinationKey = AppDestination.SESSION.key }
+                        onCollapseSide = { sideCollapsed = true },
+                        onShowConnections = {
+                            destinationKey = AppDestination.CONNECTIONS.key
+                            sideCollapsed = false
+                        }
                     )
+                }
+            }
+            if (wideLayout && (settingsOpen || destination == AppDestination.SETTINGS)) {
+                WorkbenchDialog(onDismiss = {
+                    settingsOpen = false
+                    if (destination == AppDestination.SETTINGS) destinationKey = AppDestination.SESSION.key
+                }) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = {
+                            settingsOpen = false
+                            if (destination == AppDestination.SETTINGS) destinationKey = AppDestination.SESSION.key
+                        }) { Text(androidx.compose.ui.res.stringResource(R.string.cd_close_panel)) }
+                    }
+                    SettingsScreen(
+                        settingsViewModel, settingsState, viewModel, state, lanSyncState, lanSyncViewModel, requestUpdateInstall,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            if (wideLayout && destination == AppDestination.SYNC) {
+                WorkbenchDialog(onDismiss = { destinationKey = AppDestination.SESSION.key }) {
+                    LanSyncScreen(lanSyncState, lanSyncViewModel)
                 }
             }
         }
@@ -402,7 +464,7 @@ private fun MainNavigationBar(
     onMore: () -> Unit
 ) {
     val moreLabel = androidx.compose.ui.res.stringResource(R.string.nav_more)
-    NavigationBar {
+    NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0)) {
         NavigationDestinationItem(destination == AppDestination.CONNECTIONS, R.string.tab_connections, Icons.Filled.Home) {
             onDestination(AppDestination.CONNECTIONS)
         }
@@ -440,59 +502,10 @@ private fun RowScope.NavigationDestinationItem(
 }
 
 @Composable
-private fun MainNavigationRail(
-    destination: AppDestination,
-    moreSelected: Boolean,
-    transferCount: Int,
-    onDestination: (AppDestination) -> Unit,
-    onMore: () -> Unit
-) {
-    val moreLabel = androidx.compose.ui.res.stringResource(R.string.nav_more)
-    NavigationRail {
-        RailDestinationItem(destination == AppDestination.CONNECTIONS, R.string.tab_connections, Icons.Filled.Home) {
-            onDestination(AppDestination.CONNECTIONS)
-        }
-        RailDestinationItem(destination == AppDestination.COMMANDS, R.string.tab_commands, Icons.Filled.Menu) {
-            onDestination(AppDestination.COMMANDS)
-        }
-        RailDestinationItem(destination == AppDestination.FORWARDS, R.string.tab_forwards, Icons.AutoMirrored.Filled.ArrowForward) {
-            onDestination(AppDestination.FORWARDS)
-        }
-        RailDestinationItem(destination == AppDestination.TRANSFERS, R.string.tab_transfers, Icons.Filled.Share, badge = transferCount) {
-            onDestination(AppDestination.TRANSFERS)
-        }
-        NavigationRailItem(
-            selected = moreSelected,
-            onClick = onMore,
-            icon = { Icon(Icons.Filled.MoreVert, contentDescription = null) },
-            label = { Text(moreLabel) },
-            modifier = Modifier.semantics { contentDescription = moreLabel }
-        )
-    }
-}
-
-@Composable
-private fun ColumnScope.RailDestinationItem(
-    selected: Boolean,
-    labelRes: Int,
-    icon: ImageVector,
-    badge: Int = 0,
-    onClick: () -> Unit
-) {
-    val label = androidx.compose.ui.res.stringResource(labelRes)
-    NavigationRailItem(
-        selected = selected,
-        onClick = onClick,
-        icon = { TransferBadge(icon, badge) },
-        label = { Text(label, maxLines = 1) },
-        modifier = Modifier.semantics { contentDescription = label }
-    )
-}
-
-@Composable
 private fun AppDestinationBody(
     modifier: Modifier,
     wideLayout: Boolean,
+    sideCollapsed: Boolean,
     destination: AppDestination,
     state: AndroidUiState,
     viewModel: MainViewModel,
@@ -502,12 +515,12 @@ private fun AppDestinationBody(
     lanSyncViewModel: LanSyncViewModel,
     snackbarHost: SnackbarHostState,
     requestUpdateInstall: () -> Unit,
-    onCollapseSide: () -> Unit
+    onCollapseSide: () -> Unit,
+    onShowConnections: () -> Unit
 ) {
     val settings = settingsState.settings
     val panels = state.selectedSessionId?.let { state.sessionPanels[it] }
-    val fullPage = destination == AppDestination.SYNC || destination == AppDestination.SETTINGS ||
-        (!wideLayout && destination != AppDestination.SESSION)
+    val fullPage = !wideLayout && destination != AppDestination.SESSION
     BoxWithConstraints(modifier) {
         val chrome = resolveSessionChrome(
             widthDp = if (wideLayout) maxWidth.value.toInt() + SessionLayoutLimits.RAIL_DP else maxWidth.value.toInt(),
@@ -517,7 +530,7 @@ private fun AppDestinationBody(
             fileHeightDp = settings.sessionFileHeightDp,
             filesOpen = panels?.filesOpen == true,
             monitorOpen = panels?.monitorOpen == true,
-            sideRequested = wideLayout && destination in AppDestination.sideTools,
+            sideRequested = wideLayout && !sideCollapsed && destination in AppDestination.sideTools,
             wide = wideLayout
         )
         LaunchedEffect(chrome.showSidePane, chrome.sideWidthDp, settings.sessionConnectionWidthDp) {
@@ -543,8 +556,16 @@ private fun AppDestinationBody(
             Box(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxSize()) {
                     if (chrome.showSidePane) {
-                        Box(Modifier.width(chrome.sideWidthDp.dp).fillMaxHeight()) {
-                            SideDestination(destination, state, viewModel, settingsState.settings.maskHosts, snackbarHost)
+                        Column(
+                            Modifier
+                                .width(chrome.sideWidthDp.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.surface)
+                        ) {
+                            SidePanelHeading(androidx.compose.ui.res.stringResource(destination.titleRes), onCollapseSide)
+                            Box(Modifier.weight(1f)) {
+                                SideDestination(destination, state, viewModel, settingsState.settings.maskHosts, snackbarHost)
+                            }
                         }
                         SessionVerticalSplitter(androidx.compose.ui.res.stringResource(R.string.cd_resize_connection)) { delta ->
                             settingsViewModel.setSessionConnectionWidth((settings.sessionConnectionWidthDp + delta).toInt())
@@ -556,12 +577,14 @@ private fun AppDestinationBody(
                         settingsViewModel = settingsViewModel,
                         chrome = chrome,
                         wide = wideLayout,
+                        maskHosts = settings.maskHosts,
+                        onShowConnections = onShowConnections,
                         onMonitorWidth = settingsViewModel::setSessionMonitorWidth,
                         onFileHeight = settingsViewModel::setSessionFileHeight,
                         modifier = Modifier.weight(1f)
                     )
                 }
-                if (!chrome.showSidePane && destination in AppDestination.sideTools) {
+                if (!chrome.showSidePane && !sideCollapsed && wideLayout && destination in AppDestination.sideTools) {
                     BackHandler { onCollapseSide() }
                     Surface(Modifier.fillMaxSize()) {
                         Column(Modifier.fillMaxSize()) {
@@ -1337,7 +1360,8 @@ private fun SettingsScreen(
     mainState: AndroidUiState,
     lanSyncState: LanSyncUiState,
     lanSyncViewModel: LanSyncViewModel,
-    onRequestUpdateInstall: () -> Unit
+    onRequestUpdateInstall: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val settings = state.settings
     val context = LocalContext.current
@@ -1412,23 +1436,31 @@ private fun SettingsScreen(
             }
         )
     }
-    LazyColumn(
-        Modifier
-            .fillMaxSize()
-            // The settings form contains text fields. Keep the focused row
-            // above the IME and leave room for gesture navigation when the
-            // bottom navigation is visible.
-            .imePadding()
-            .navigationBarsPadding(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = OpenFinalShellSpacing.PageHorizontal,
-            top = OpenFinalShellSpacing.PageVertical,
-            end = OpenFinalShellSpacing.PageHorizontal,
-            bottom = OpenFinalShellSpacing.XXLarge
-        ),
-        verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)
-    ) {
-        item {
+    var settingsSection by rememberSaveable { mutableStateOf(SettingsPane.GENERAL.id) }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val wideSettings = maxWidth >= 560.dp
+        Row(Modifier.fillMaxSize()) {
+            if (wideSettings) {
+                SettingsPaneList(settingsSection, vertical = true) { settingsSection = it }
+            }
+            LazyColumn(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .imePadding()
+                    .navigationBarsPadding(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = OpenFinalShellSpacing.Medium,
+                    top = OpenFinalShellSpacing.Small,
+                    end = OpenFinalShellSpacing.Medium,
+                    bottom = OpenFinalShellSpacing.XXLarge
+                ),
+                verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)
+            ) {
+                if (!wideSettings) {
+                    item { SettingsPaneList(settingsSection, vertical = false) { settingsSection = it } }
+                }
+        if (settingsSection == SettingsPane.GENERAL.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_general)) {
                 ChoiceRow(
                     androidx.compose.ui.res.stringResource(R.string.settings_language),
@@ -1436,9 +1468,11 @@ private fun SettingsScreen(
                     AndroidLocales.options.map { it.tag to it.labelRes }
                 ) { viewModel.setLanguage(it) }
                 SettingsSwitchRow(androidx.compose.ui.res.stringResource(R.string.settings_auto_updates), settings.autoCheckUpdates, viewModel::setAutoCheckUpdates)
+                Text(androidx.compose.ui.res.stringResource(R.string.keepalive_title), style = MaterialTheme.typography.titleSmall)
+                KeepAliveSettings()
             }
         }
-        item {
+        if (settingsSection == SettingsPane.APPEARANCE.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_appearance)) {
                 ChoiceRow(
                     androidx.compose.ui.res.stringResource(R.string.settings_theme),
@@ -1452,7 +1486,7 @@ private fun SettingsScreen(
                 SettingsSwitchRow(androidx.compose.ui.res.stringResource(R.string.settings_mask_hosts), settings.maskHosts, viewModel::setMaskHosts)
             }
         }
-        item {
+        if (settingsSection == SettingsPane.TERMINAL.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_terminal)) {
                 NumberSetting(
                     label = androidx.compose.ui.res.stringResource(R.string.settings_terminal_font_size),
@@ -1535,7 +1569,7 @@ private fun SettingsScreen(
                 )
             }
         }
-        item {
+        if (settingsSection == SettingsPane.TRANSFER.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_transfer_monitor)) {
                 ChoiceRow(
                     androidx.compose.ui.res.stringResource(R.string.settings_sftp_concurrency),
@@ -1586,7 +1620,7 @@ private fun SettingsScreen(
                 }
             }
         }
-        item {
+        if (settingsSection == SettingsPane.PROXY.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_proxy_and_keys)) {
                 Text(androidx.compose.ui.res.stringResource(R.string.settings_private_keys), style = MaterialTheme.typography.labelLarge)
                 if (mainState.privateKeys.isEmpty()) {
@@ -1632,7 +1666,7 @@ private fun SettingsScreen(
                 KnownHostSettingsContent(mainState, mainViewModel)
             }
         }
-        item {
+        if (settingsSection == SettingsPane.SECURITY.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_security_data)) {
                 if (BuildConfig.LOCAL_SHELL_ENABLED) {
                     SettingsSwitchRow(
@@ -1676,16 +1710,18 @@ private fun SettingsScreen(
                 }
             }
         }
-        item {
+        if (settingsSection == SettingsPane.SYNC.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_lan_sync)) {
                 LanSyncScreen(lanSyncState, lanSyncViewModel, embedded = true)
             }
         }
-        item {
+        if (settingsSection == SettingsPane.ABOUT.id) item {
             SettingsSection(androidx.compose.ui.res.stringResource(R.string.settings_about)) {
                 Text(androidx.compose.ui.res.stringResource(R.string.settings_version, BuildConfig.VERSION_NAME))
                 Text(androidx.compose.ui.res.stringResource(R.string.settings_about_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 UpdatePanel(state, viewModel, onRequestUpdateInstall)
+            }
+        }
             }
         }
     }
@@ -1711,6 +1747,97 @@ private fun SettingsScreen(
     }
 }
 
+private enum class SettingsPane(val id: String, val label: Int) {
+    GENERAL("general", R.string.settings_general),
+    APPEARANCE("appearance", R.string.settings_appearance),
+    TERMINAL("terminal", R.string.settings_terminal),
+    TRANSFER("transfer", R.string.settings_transfer_monitor),
+    PROXY("proxy", R.string.settings_proxy_and_keys),
+    SECURITY("security", R.string.settings_security_data),
+    SYNC("sync", R.string.settings_lan_sync),
+    ABOUT("about", R.string.settings_about)
+}
+
+@Composable
+private fun SettingsPaneList(selected: String, vertical: Boolean, onSelect: (String) -> Unit) {
+    if (vertical) {
+        Column(
+            Modifier
+                .width(200.dp)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = OpenFinalShellSpacing.Small)
+        ) {
+            SettingsPane.entries.forEach { pane ->
+                val label = androidx.compose.ui.res.stringResource(pane.label)
+                TextButton(
+                    onClick = { onSelect(pane.id) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = if (selected == pane.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Text(label, modifier = Modifier.fillMaxWidth(), maxLines = 2)
+                }
+            }
+        }
+    } else {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.XSmall)
+        ) {
+            SettingsPane.entries.forEach { pane ->
+                FilterChip(
+                    selected = selected == pane.id,
+                    onClick = { onSelect(pane.id) },
+                    label = { Text(androidx.compose.ui.res.stringResource(pane.label), maxLines = 1) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeepAliveSettings() {
+    val context = LocalContext.current
+    val power = context.getSystemService(android.os.PowerManager::class.java)
+    var exempt by remember { mutableStateOf(power.isIgnoringBatteryOptimizations(context.packageName)) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                exempt = power.isIgnoringBatteryOptimizations(context.packageName)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    Text(
+        androidx.compose.ui.res.stringResource(R.string.keepalive_body),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text(
+        androidx.compose.ui.res.stringResource(if (exempt) R.string.keepalive_battery_exempt else R.string.keepalive_battery),
+        style = MaterialTheme.typography.labelLarge
+    )
+    if (!exempt) {
+        Button(
+            onClick = {
+                val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(android.net.Uri.parse("package:${context.packageName}"))
+                runCatching { context.startActivity(intent) }
+            },
+            modifier = Modifier.heightIn(min = OpenFinalShellSpacing.MinimumTouchTarget)
+        ) { Text(androidx.compose.ui.res.stringResource(R.string.keepalive_battery_action)) }
+    }
+    Text(
+        androidx.compose.ui.res.stringResource(R.string.keepalive_oem),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
 @Composable
 private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(
@@ -1722,7 +1849,7 @@ private fun SettingsSection(title: String, content: @Composable ColumnScope.() -
             modifier = Modifier.padding(OpenFinalShellSpacing.Medium),
             verticalArrangement = Arrangement.spacedBy(OpenFinalShellSpacing.Small)
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleSmall)
             content()
         }
     }

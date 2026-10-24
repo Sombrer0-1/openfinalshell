@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_toggle_theme">Design wechseln</string>
+    <string name="cd_collapse_side_panel">Seitenleiste einklappen</string>
+    <string name="status_not_connected">Nicht verbunden</string>
+    <string name="status_transfer_brief">%1$d ↓%2$s ↑%3$s</string>
+    <string name="welcome_title">OpenFinalShell</string>
+    <string name="welcome_subtitle">Verbinden Sie sich mit einem Host, um ein Terminal zu öffnen. Bei genug Breite liegen Dateien unter dem Terminal und die Überwachung daneben.</string>
+    <string name="action_show_connections">Verbindungen anzeigen</string>
+    <string name="keepalive_title">Sitzungen im Hintergrund</string>
+    <string name="keepalive_body">Offene Sitzungen bleiben verbunden, während die App im Hintergrund ist, und eine Benachrichtigung bleibt sichtbar. Eine Sitzung endet, wenn Sie sie schließen oder das System die App beendet.</string>
+    <string name="keepalive_battery">Akkuoptimierung</string>
+    <string name="keepalive_battery_exempt">Uneingeschränkt</string>
+    <string name="keepalive_battery_action">Hintergrundaktivität erlauben</string>
+    <string name="keepalive_oem">Manche Hersteller beenden Hintergrund-Apps trotzdem. Wenn eine Sitzung abbricht, nachdem Sie die App verlassen, erlauben Sie OpenFinalShell uneingeschränkten Akku, Autostart und Hintergrundaktivität in den Systemeinstellungen.</string>
+    <string name="notification_tap_to_open">OpenFinalShell öffnen</string>
+</resources>
