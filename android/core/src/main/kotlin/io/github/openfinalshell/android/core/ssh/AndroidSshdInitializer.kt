@@ -10,6 +10,7 @@ import org.apache.sshd.common.NamedFactory
 import org.apache.sshd.common.signature.BuiltinSignatures
 import org.apache.sshd.common.signature.Signature
 import org.apache.sshd.common.util.io.PathUtils
+import org.apache.sshd.common.util.security.SecurityProviderChoice
 import org.apache.sshd.common.util.security.SecurityUtils
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 
@@ -129,28 +130,68 @@ object AndroidSshdInitializer {
     }
 
     private fun registerSecurityProviderLocked() {
-        // Android vendors may ship a provider named "BC" that is not compatible with
-        // the algorithms MINA probes (for example SHA-256 on some Xiaomi builds). Keep
-        // MINA on the platform JCA providers instead of selecting that provider by name.
-        // This must happen before the first SecurityUtils registration call.
+        // Android (and some OEMs) ship a JCA provider literally named "BC" that is a
+        // stripped stub without MessageDigest SHA-256. Apache MINA SSHD will happily
+        // bind digests to MessageDigest.getInstance(algo, "BC") once its registrar
+        // sees that name — which breaks every KEX (DHGClient.init) once EdDSA/BC
+        // registration runs. Replace the stub with the packaged bcprov first so any
+        // named-"BC" lookup resolves to a full provider, then keep MINA on the
+        // default JCA chain for digests.
+        ensurePackagedBouncyCastleLocked()
+
+        // Must run before the first SecurityUtils.register() call. Harmless if register
+        // already happened: we also force EMPTY below so late recovery still works
+        // when the MessageDigest factory cache has not been populated yet.
         SecurityUtils.setAPrioriDisabledProvider(SecurityUtils.BOUNCY_CASTLE, true)
+        SecurityUtils.setDefaultProviderChoice(SecurityProviderChoice.EMPTY)
 
-        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
-            runCatching { Security.addProvider(BouncyCastleProvider()) }
-                .onFailure { Log.w(TAG, "Unable to register Bouncy Castle provider", it) }
-        }
-
-        // Trigger MINA's registrar after the provider is visible. It will keep an existing
-        // Android provider and select BC only when it is actually usable.
+        // Trigger MINA's registrar after the provider table is sane. With BC a-priori
+        // disabled, MINA leaves digests on the platform provider; EdDSA still registers
+        // via net.i2p.crypto:eddsa for ssh-ed25519.
         runCatching { SecurityUtils.isBouncyCastleRegistered() }
             .onFailure { Log.w(TAG, "MINA security provider registration failed", it) }
 
-        // net.i2p.crypto:eddsa — required for ssh-ed25519 host keys and signatures.
         val eddsa = runCatching { SecurityUtils.isEDDSACurveSupported() }
             .onFailure { Log.w(TAG, "EdDSA provider probe failed", it) }
             .getOrDefault(false)
         if (!eddsa) {
             Log.w(TAG, "EdDSA curve is not available; ssh-ed25519 host keys will not negotiate")
+        }
+    }
+
+    /**
+     * Ensure [Security] exposes a full [BouncyCastleProvider] under the name "BC".
+     * Returns without changes when the packaged provider is already installed.
+     */
+    private fun ensurePackagedBouncyCastleLocked() {
+        val expectedClass = BouncyCastleProvider::class.java.name
+        val existing = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+        if (existing != null && existing.javaClass.name == expectedClass) {
+            return
+        }
+
+        val replacedFrom = existing?.javaClass?.name
+        runCatching {
+            if (existing != null) {
+                Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+            }
+            val position = Security.insertProviderAt(BouncyCastleProvider(), 1)
+            val now = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+            if (now == null || now.javaClass.name != expectedClass) {
+                error(
+                    "Packaged BouncyCastleProvider not installed " +
+                        "(insertProviderAt=$position, now=${now?.javaClass?.name})"
+                )
+            }
+        }.onSuccess {
+            if (replacedFrom != null) {
+                // android.util.Log is not mocked in JVM unit tests — never fail init on logging.
+                runCatching {
+                    Log.i(TAG, "Replaced incompatible JCA provider BC ($replacedFrom) with packaged bcprov")
+                }
+            }
+        }.onFailure { err ->
+            runCatching { Log.w(TAG, "Unable to install packaged BouncyCastleProvider", err) }
         }
     }
 }
