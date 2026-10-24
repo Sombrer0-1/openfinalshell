@@ -65,8 +65,25 @@ class ConnectionForegroundService : Service() {
             liveWorkbench()?.ensureBackgroundKeepAlive()
             return START_STICKY
         }
-        if (intent?.action == ACTION_STOP || stopRequested) {
+        if (intent?.action == ACTION_STOP) {
             stopRequested = true
+            clearCounts()
+            releaseLocks()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        // Non-STOP intents clear a prior stop flag so a raced START/UPDATE after STOP on the
+        // same instance is not swallowed (base only checked ACTION_STOP).
+        if (SessionKeepAlivePolicy.shouldResetStopRequested(
+                actionIsStop = intent?.action == ACTION_STOP,
+                intentPresent = intent != null
+            )
+        ) {
+            stopRequested = false
+        }
+        if (stopRequested) {
+            // No actionable intent (e.g. sticky null) while a stop is still in effect.
             clearCounts()
             releaseLocks()
             stopForeground(STOP_FOREGROUND_REMOVE)

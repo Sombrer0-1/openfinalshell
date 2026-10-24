@@ -751,6 +751,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private var keepAliveStarted = false
+    /** Last counts sent to the FGS; skip identical UPDATEs to avoid transfer IPC storms. */
+    private var lastPublishedKeepAlive: SessionKeepAlivePolicy.PublishedCounts? = null
     private var connectsInFlight = 0
     private var notificationPermissionPrompted = false
     private val _requestNotificationPermission = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -770,24 +772,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.PAUSED
         }
+        val activeForwards = forwardingHandles.size
+        val connecting = connectsInFlight > 0 && activeSessions == 0
         val hold = SessionKeepAlivePolicy.shouldHoldIncludingConnects(
             activeSessions,
             activeTransfers,
-            forwardingHandles.size,
+            activeForwards,
             connectsInFlight
         )
         if (hold) {
             keepAliveStarted = true
             promptNotificationPermissionOnce()
+            val next = SessionKeepAlivePolicy.PublishedCounts(
+                sessions = activeSessions,
+                transfers = activeTransfers,
+                forwards = activeForwards,
+                connecting = connecting
+            )
+            // Counts unchanged → no startForegroundService / prefs write / notification rebuild.
+            // Transfer chunk progress fires often but does not change these counts.
+            if (!SessionKeepAlivePolicy.shouldRepublish(lastPublishedKeepAlive, next)) {
+                return
+            }
+            lastPublishedKeepAlive = next
             ConnectionForegroundService.update(
                 getApplication(),
                 activeSessions,
                 activeTransfers,
-                forwardingHandles.size,
-                connecting = connectsInFlight > 0 && activeSessions == 0
+                activeForwards,
+                connecting = connecting
             )
         } else if (keepAliveStarted) {
             keepAliveStarted = false
+            lastPublishedKeepAlive = null
             ConnectionForegroundService.stop(getApplication())
         }
     }

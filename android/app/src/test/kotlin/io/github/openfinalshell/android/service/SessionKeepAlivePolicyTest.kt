@@ -42,4 +42,36 @@ class SessionKeepAlivePolicyTest {
         assertTrue(SessionKeepAlivePolicy.keepRunningAfterStart(false, connecting = true, 0, 0, 0))
         assertFalse(SessionKeepAlivePolicy.keepRunningAfterStart(false, connecting = false, 0, 0, 0))
     }
+
+    @Test
+    fun `identical keep-alive counts are not republished`() {
+        val snap = SessionKeepAlivePolicy.PublishedCounts(1, 1, 0, connecting = false)
+        assertFalse(SessionKeepAlivePolicy.shouldRepublish(snap, snap))
+        assertFalse(
+            SessionKeepAlivePolicy.shouldRepublish(
+                snap,
+                SessionKeepAlivePolicy.PublishedCounts(1, 1, 0, connecting = false)
+            )
+        )
+        assertTrue(SessionKeepAlivePolicy.shouldRepublish(null, snap))
+        assertTrue(
+            SessionKeepAlivePolicy.shouldRepublish(
+                snap,
+                SessionKeepAlivePolicy.PublishedCounts(1, 0, 0, connecting = false)
+            )
+        )
+        assertTrue(
+            SessionKeepAlivePolicy.shouldRepublish(
+                snap,
+                SessionKeepAlivePolicy.PublishedCounts(1, 1, 0, connecting = true)
+            )
+        )
+    }
+
+    @Test
+    fun `non-stop intents reset the stop flag — stop does not`() {
+        assertTrue(SessionKeepAlivePolicy.shouldResetStopRequested(actionIsStop = false, intentPresent = true))
+        assertFalse(SessionKeepAlivePolicy.shouldResetStopRequested(actionIsStop = true, intentPresent = true))
+        assertFalse(SessionKeepAlivePolicy.shouldResetStopRequested(actionIsStop = false, intentPresent = false))
+    }
 }
