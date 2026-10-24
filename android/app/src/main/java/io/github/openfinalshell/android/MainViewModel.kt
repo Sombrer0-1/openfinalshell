@@ -504,8 +504,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Called when the activity stops so a backgrounded app still owns a foreground service. */
+    /** Called when the activity stops or the FGS sticky-restarts; force republish past dedupe. */
     fun ensureBackgroundKeepAlive() {
+        // Clear lastPublished so sticky restart / onStop re-assert always reaches startForeground.
+        lastPublishedKeepAlive = null
         updateBackgroundService()
     }
 
