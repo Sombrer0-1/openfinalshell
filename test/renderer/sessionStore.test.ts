@@ -37,6 +37,7 @@ const { useSessionStore, wireSessionEvents } = await import('@/stores/useSession
 const { useSettingsStore } = await import('@/stores/useSettingsStore')
 const { useMonitorStore, historyOf } = await import('@/stores/useMonitorStore')
 const { usePortTrafficStore } = await import('@/stores/usePortTrafficStore')
+const { useProcessPanelStore } = await import('@/stores/useProcessPanelStore')
 const { DEFAULT_SETTINGS } = await import('@shared/constants')
 type SessionTab = ReturnType<typeof useSessionStore.getState>['tabs'][number]
 
@@ -76,6 +77,7 @@ beforeEach(() => {
   useSettingsStore.setState({ settings: null })
   useMonitorStore.setState({ latest: {}, staticInfo: {}, state: {} })
   usePortTrafficStore.setState({ latest: {}, state: {}, error: {} })
+  useProcessPanelStore.setState({ latest: {}, state: {}, error: {}, details: {} })
   calls.length = 0
   invokeImpl = async () => ({ sessionId: 'sid-1' })
   wireSessionEvents()
@@ -369,6 +371,53 @@ describe('端口流量标签', () => {
 
     expect(useSessionStore.getState().tabs).toEqual([])
     expect(calls.map(([channel]) => channel)).toContain('portTraffic:stop')
+    expect(calls.map(([channel]) => channel)).toContain('session:close')
+  })
+})
+
+
+describe('进程面板标签', () => {
+  it('复用当前 SSH 会话打开标签，不会重复发起 session:open', () => {
+    seedTab({ state: 'ready' })
+    useSessionStore.getState().openProcessPanelTab('tab-1', 'srv · 进程')
+
+    const tabs = useSessionStore.getState().tabs
+    expect(tabs).toHaveLength(2)
+    expect(tabs[1]).toMatchObject({
+      kind: 'processPanel',
+      sourceTabId: 'tab-1',
+      sessionId: 'sid-1',
+      termId: null,
+      sftpOpen: false,
+      monitorOpen: false
+    })
+    expect(useSessionStore.getState().activeTabId).toBe(tabs[1].id)
+    expect(calls.map(([channel]) => channel)).not.toContain('session:open')
+
+    useSessionStore.getState().openProcessPanelTab('tab-1', 'ignored')
+    expect(useSessionStore.getState().tabs).toHaveLength(2)
+  })
+
+  it('关闭进程标签只停止进程采集，不会关闭源 SSH 会话', async () => {
+    seedTab({ state: 'ready' })
+    useSessionStore.getState().openProcessPanelTab('tab-1', 'srv · 进程')
+    const panelTabId = useSessionStore.getState().tabs[1].id
+
+    await useSessionStore.getState().closeTab(panelTabId)
+
+    expect(useSessionStore.getState().tabs.map((t) => t.id)).toEqual(['tab-1'])
+    expect(calls.map(([channel]) => channel)).toContain('processPanel:stop')
+    expect(calls.map(([channel]) => channel)).not.toContain('session:close')
+  })
+
+  it('关闭源会话时连同进程标签一起移除', async () => {
+    seedTab({ state: 'ready' })
+    useSessionStore.getState().openProcessPanelTab('tab-1', 'srv · 进程')
+
+    await useSessionStore.getState().closeTab('tab-1')
+
+    expect(useSessionStore.getState().tabs).toEqual([])
+    expect(calls.map(([channel]) => channel)).toContain('processPanel:stop')
     expect(calls.map(([channel]) => channel)).toContain('session:close')
   })
 })

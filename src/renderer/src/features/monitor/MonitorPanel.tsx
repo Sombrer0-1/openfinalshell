@@ -46,6 +46,7 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
   const state = useMonitorStore((s) => (sessionId ? s.state[sessionId] : undefined))
   const start = useMonitorStore((s) => s.start)
   const openPortTrafficTab = useSessionStore((s) => s.openPortTrafficTab)
+  const openProcessPanelTab = useSessionStore((s) => s.openProcessPanelTab)
   const [showCores, setShowCores] = useState(false)
   const [showProcs, setShowProcs] = useState(false)
 
@@ -268,11 +269,37 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
           </div>
         )}
 
-        {/* 进程 Top */}
+        {/* 进程 Top —— 卡片可点进完整进程面板；折叠箭头仍只控制迷你列表 */}
         {snapshot.topProcs && snapshot.topProcs.length > 0 && (
           <div className={styles.card}>
             <div className={styles.cardHead}>
-              <span className={styles.cardHeadTitle}>{t('monitor.topProcs')}</span>
+              <button
+                type="button"
+                className={styles.cardHeadTitle}
+                style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' }}
+                onClick={() =>
+                  openProcessPanelTab(
+                    tab.id,
+                    `${tab.customTitle ?? tab.title} · ${t('processPanel.tab')}`
+                  )
+                }
+              >
+                {t('monitor.topProcs')}
+              </button>
+              <span className={styles.cardActionHint} style={{ marginRight: 4 }}>
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                  onClick={() =>
+                    openProcessPanelTab(
+                      tab.id,
+                      `${tab.customTitle ?? tab.title} · ${t('processPanel.tab')}`
+                    )
+                  }
+                >
+                  {t('processPanel.open')} <ChevronRight size={13} />
+                </button>
+              </span>
               <span className={styles.cardToggle} onClick={() => setShowProcs((v) => !v)}>
                 {showProcs ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
               </span>

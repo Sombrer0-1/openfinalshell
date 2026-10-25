@@ -22,7 +22,7 @@ function tabMenuItems(tab: SessionTab, t: (key: string) => string) {
     { key: 'closeToRight', label: t('tab.closeToRight') },
     { key: 'closeAll', label: t('tab.closeAll'), danger: true }
   ]
-  if (tab.kind === 'portTraffic') return closeItems
+  if (tab.kind === 'portTraffic' || tab.kind === 'processPanel') return closeItems
   return [
     { key: 'rename', label: t('tab.rename') },
     { key: 'duplicate', label: t('tab.duplicate') },

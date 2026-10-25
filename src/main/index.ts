@@ -14,6 +14,7 @@ import { registerSnippetIpc } from './ipc/snippet.ipc'
 import { registerSftpIpc } from './ipc/sftp.ipc'
 import { registerMonitorIpc } from './ipc/monitor.ipc'
 import { registerPortTrafficIpc } from './ipc/portTraffic.ipc'
+import { registerProcessPanelIpc } from './ipc/processPanel.ipc'
 import { registerForwardIpc } from './ipc/forward.ipc'
 import { registerHistoryIpc } from './ipc/history.ipc'
 import { registerEditorIpc } from './ipc/editor.ipc'
@@ -24,6 +25,7 @@ import { registerSyncIpc } from './ipc/sync.ipc'
 import { registerRdpIpc } from './ipc/rdp.ipc'
 import { monitorManager } from './monitor/MonitorManager'
 import { portTrafficManager } from './monitor/PortTrafficManager'
+import { processPanelManager } from './monitor/ProcessPanelManager'
 import { forwardManager } from './forward/ForwardManager'
 import { lanSyncManager } from './lansync/LanSyncManager'
 import { flushForwards } from './store/forwards'
@@ -196,6 +198,7 @@ if (!ownsSingleInstanceLock) {
     registerSftpIpc()
     registerMonitorIpc()
     registerPortTrafficIpc()
+    registerProcessPanelIpc()
     registerForwardIpc()
     registerHistoryIpc()
     registerSavedRefsIpc()
@@ -236,6 +239,7 @@ if (!ownsSingleInstanceLock) {
       transferQueue.cancelAll()
       monitorManager.stopAll()
       portTrafficManager.stopAll()
+      processPanelManager.stopAll()
       forwardManager.stopAll()
       lanSyncManager.stopAll()
       sshManager.closeAll()

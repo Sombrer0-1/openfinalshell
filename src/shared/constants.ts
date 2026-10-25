@@ -275,3 +275,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     }
   }
 }
+
+/** 进程面板独立通道采样，不与右侧监控 / 端口流量抢同一帧。 */
+export const PROCESS_PANEL_INTERVAL_MS = 2000
+/** 全量进程表上限：cmdline 较长时防止单帧打爆 main 内存。 */
+export const PROCESS_PANEL_MAX_FRAME_BYTES = 2 * 1024 * 1024
+export const PROCESS_PANEL_FRAME_TIMEOUT_MS = 8000
+/** 列表最多保留的进程数（按 CPU 排序后截断）。 */
+export const PROCESS_PANEL_MAX_PROCS = 4000

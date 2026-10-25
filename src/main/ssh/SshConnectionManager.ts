@@ -9,6 +9,7 @@ import { forgetSessionBaselines } from '../sftp/editBaselines'
 import { clearProbeCache } from '../sftp/packTransfer'
 import { monitorManager } from '../monitor/MonitorManager'
 import { portTrafficManager } from '../monitor/PortTrafficManager'
+import { processPanelManager } from '../monitor/ProcessPanelManager'
 import { forwardManager } from '../forward/ForwardManager'
 import { autoStartRules } from '../store/forwards'
 import { t } from '../services/i18n'
@@ -53,6 +54,9 @@ class SshConnectionManager {
       })
       void portTrafficManager.reattach(conn.sessionId).catch((err: Error) => {
         log.warn(`restore port traffic failed: ${err.message}`)
+      })
+      void processPanelManager.reattach(conn.sessionId).catch((err: Error) => {
+        log.warn(`restore process panel failed: ${err.message}`)
       })
       const pending = this.pendingForwards.get(conn.sessionId)
       if (!pending || pending.length === 0) return
@@ -135,6 +139,7 @@ class SshConnectionManager {
     forgetSessionBaselines(sessionId)
     monitorManager.stop(sessionId)
     portTrafficManager.stop(sessionId)
+    processPanelManager.stop(sessionId)
     forwardManager.stopForSession(sessionId)
     this.pendingForwards.delete(sessionId)
     for (const termId of conn.shells.keys()) this.terms.delete(termId)

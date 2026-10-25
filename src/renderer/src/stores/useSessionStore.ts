@@ -6,15 +6,16 @@ import i18n from '@/i18n'
 import { useSettingsStore } from './useSettingsStore'
 import { useMonitorStore } from './useMonitorStore'
 import { usePortTrafficStore } from './usePortTrafficStore'
+import { useProcessPanelStore } from './useProcessPanelStore'
 import { useConnectionStore } from './useConnectionStore'
 
-export type SessionTabKind = 'terminal' | 'portTraffic' | 'rdp'
+export type SessionTabKind = 'terminal' | 'portTraffic' | 'processPanel' | 'rdp'
 
 export interface SessionTab {
   id: string
   /** 未标记的旧 tab 视为 terminal，避免升级时破坏运行中的状态。 */
   kind?: SessionTabKind
-  /** portTraffic 标签依附的终端标签；关闭源标签时会被一并关闭。 */
+  /** portTraffic / processPanel 等工具标签依附的终端标签；关闭源标签时会被一并关闭。 */
   sourceTabId?: string
   profileId: string
   sessionId: SessionId | null
@@ -69,6 +70,8 @@ interface SessionStore {
   toggleMonitor: (id: string) => void
   /** 在当前窗口打开依附于既有 SSH 会话的端口流量标签，不重复登录。 */
   openPortTrafficTab: (id: string, title: string) => void
+  /** 在当前窗口打开依附于既有 SSH 会话的进程面板标签，不重复登录。 */
+  openProcessPanelTab: (id: string, title: string) => void
 }
 
 /**
@@ -233,7 +236,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   duplicateTab: async (id, profiles) => {
     const tab = get().tabs.find((t) => t.id === id)
-    if (tab?.kind === 'portTraffic') return
+    if (tab?.kind === 'portTraffic' || tab?.kind === 'processPanel') return
     const profile = profiles.find((p) => p.id === tab?.profileId)
     if (profile) {
       if (profile.protocol === 'rdp') await get().openRdpForProfile(profile)
@@ -244,9 +247,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   closeTab: async (id) => {
     const tab = get().tabs.find((t) => t.id === id)
     const closingIds = new Set<string>([id])
-    if (tab?.kind !== 'portTraffic') {
+    if (tab?.kind !== 'portTraffic' && tab?.kind !== 'processPanel') {
       for (const candidate of get().tabs) {
-        if (candidate.kind === 'portTraffic' && candidate.sourceTabId === id) closingIds.add(candidate.id)
+        if (
+          (candidate.kind === 'portTraffic' || candidate.kind === 'processPanel') &&
+          candidate.sourceTabId === id
+        ) {
+          closingIds.add(candidate.id)
+        }
       }
     }
     /**
@@ -271,6 +279,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         usePortTrafficStore.getState().clear(tab.sessionId)
         return
       }
+      if (tab.kind === 'processPanel') {
+        await useProcessPanelStore.getState().stop(tab.sessionId).catch(() => {})
+        useProcessPanelStore.getState().clear(tab.sessionId)
+        return
+      }
       if (tab.kind === 'rdp') {
         await ofs.invoke('rdp:close', tab.sessionId).catch(() => {})
         return
@@ -280,6 +293,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       useMonitorStore.getState().clear(tab.sessionId)
       await usePortTrafficStore.getState().stop(tab.sessionId).catch(() => {})
       usePortTrafficStore.getState().clear(tab.sessionId)
+      await useProcessPanelStore.getState().stop(tab.sessionId).catch(() => {})
+      useProcessPanelStore.getState().clear(tab.sessionId)
       await ofs.invoke('session:close', tab.sessionId).catch(() => {})
     }
   },
@@ -288,7 +303,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const selected = get().tabs.find((t) => t.id === id)
     // 流量标签依附源终端；“关闭其他”时保留这个必要的源标签，避免把当前标签一并删掉。
     const keepIds = new Set([id])
-    if (selected?.kind === 'portTraffic' && selected.sourceTabId) keepIds.add(selected.sourceTabId)
+    if (
+      (selected?.kind === 'portTraffic' || selected?.kind === 'processPanel') &&
+      selected.sourceTabId
+    ) {
+      keepIds.add(selected.sourceTabId)
+    }
     const others = get().tabs.filter((t) => !keepIds.has(t.id))
     for (const t of others) await get().closeTab(t.id)
     if (get().tabs.some((t) => t.id === id)) set({ activeTabId: id })
@@ -304,7 +324,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   reconnectTab: async (id) => {
     const tab = get().tabs.find((t) => t.id === id)
     if (!tab) return
-    if (tab.kind === 'portTraffic') {
+    if (tab.kind === 'portTraffic' || tab.kind === 'processPanel') {
       if (tab.sourceTabId) await get().reconnectTab(tab.sourceTabId)
       return
     }
@@ -415,7 +435,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   openPortTrafficTab: (id, title) => {
     const source = get().tabs.find((t) => t.id === id)
-    if (!source || source.kind === 'portTraffic' || !source.sessionId) return
+    if (!source || source.kind === 'portTraffic' || source.kind === 'processPanel' || !source.sessionId) return
     const existing = get().tabs.find(
       (t) => t.kind === 'portTraffic' && t.sourceTabId === source.id
     )
@@ -427,6 +447,30 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       ...source,
       id: crypto.randomUUID(),
       kind: 'portTraffic',
+      sourceTabId: source.id,
+      title,
+      customTitle: undefined,
+      termId: null,
+      sftpOpen: false,
+      monitorOpen: false
+    }
+    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
+  },
+
+  openProcessPanelTab: (id, title) => {
+    const source = get().tabs.find((t) => t.id === id)
+    if (!source || source.kind === 'portTraffic' || source.kind === 'processPanel' || !source.sessionId) return
+    const existing = get().tabs.find(
+      (t) => t.kind === 'processPanel' && t.sourceTabId === source.id
+    )
+    if (existing) {
+      set({ activeTabId: existing.id })
+      return
+    }
+    const tab: SessionTab = {
+      ...source,
+      id: crypto.randomUUID(),
+      kind: 'processPanel',
       sourceTabId: source.id,
       title,
       customTitle: undefined,
