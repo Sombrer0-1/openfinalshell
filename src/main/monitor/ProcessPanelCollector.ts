@@ -112,6 +112,7 @@ export class ProcessPanelCollector {
   private frameTimer: NodeJS.Timeout | null = null
   private pending: { seq: number; resolve: (body: string | null) => void } | null = null
   private failures = 0
+  private openGen = 0
   private stopped = false
   private probed = false
   private hasPsSort = true
@@ -150,9 +151,14 @@ export class ProcessPanelCollector {
   }
 
   private async open(): Promise<void> {
+    // 在途守卫：通道死亡的 5s 重建与 SSH 重连驱动的 reattach 可能同时在途各调一次
+    // open()。代际计数让后发起者胜出：先落地者发现自己已过期，就地关通道返回，
+    // 不注册监听、不设定时器 —— 否则 timer 被覆盖泄漏一个轮询，通道成为孤儿。
+    const gen = ++this.openGen
+    this.pause()
     this.setState('running')
     const channel = await this.openChannel()
-    if (this.stopped) {
+    if (this.stopped || gen !== this.openGen) {
       channel.close()
       return
     }
@@ -282,6 +288,11 @@ export class ProcessPanelCollector {
     // 整条 SSH 连接断了的情况由 ProcessPanelManager.reattach 在重连成功后驱动。
     // 对齐 MonitorCollector.onChannelClosed，避免单条 exec 通道死后面板永久假死。
     log.debug(`session ${this.sessionId}: process panel channel closed, retrying in 5s`)
+    this.scheduleRestart()
+  }
+
+  /** 5s 后重建；open() 抛错也走这里重排，连续 MAX_CONSECUTIVE_FAILURES 次后由 onFailure 置 failed。 */
+  private scheduleRestart(): void {
     setTimeout(() => {
       if (this.stopped || this.channel) return
       void this.restart()
@@ -294,6 +305,9 @@ export class ProcessPanelCollector {
       await this.open()
     } catch (err) {
       this.onFailure(err instanceof Error ? err.message : String(err))
+      // 不排下一次重试的话 collector 会停在 running 且无任何定时器，面板失去恢复入口。
+      if (!this.stopped && this.failures < MAX_CONSECUTIVE_FAILURES) this.scheduleRestart()
     }
   }
+
 }

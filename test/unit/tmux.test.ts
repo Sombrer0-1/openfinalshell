@@ -364,4 +364,121 @@ describe('TmuxCollector', () => {
       vi.useRealTimers()
     }
   })
+
+  it('SSH 通道意外关闭后 5 秒重建（而不是只计失败后假死）', async () => {
+    vi.useFakeTimers()
+    try {
+      let openCount = 0
+      let first: ReturnType<typeof makeChannel> | null = null
+      const collector = new TmuxCollector(
+        'session-rebuild',
+        async () => {
+          openCount += 1
+          first = makeChannel(() => 'ignored')
+          return first.channel as never
+        },
+        { onSnapshot: () => {}, onState: () => {} }
+      )
+      await collector.start()
+      expect(openCount).toBe(1)
+      // 模拟常驻 sh 被杀
+      first!.channel.close()
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(openCount).toBe(2)
+      collector.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('重建 open() 失败会重排重试，连续 3 次失败后进 failed 且不再重排', async () => {
+    vi.useFakeTimers()
+    try {
+      const states: string[] = []
+      let openCount = 0
+      let first: ReturnType<typeof makeChannel> | null = null
+      const collector = new TmuxCollector(
+        'session-retry',
+        async () => {
+          openCount += 1
+          if (openCount === 1) {
+            first = makeChannel(() => 'ignored')
+            return first.channel as never
+          }
+          throw new Error('open failed')
+        },
+        { onSnapshot: () => {}, onState: (state) => states.push(state) }
+      )
+      await collector.start()
+      expect(collector.state).toBe('collecting')
+      // 通道死亡：在途帧收尾计第 1 次失败，5s 后第一次重建（open 抛错，第 2 次）
+      first!.channel.close()
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(openCount).toBe(2)
+      expect(collector.state).toBe('collecting')
+      // 第二次重建抛错 → 第 3 次失败 → failed，不再排重试
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(openCount).toBe(3)
+      expect(collector.state).toBe('failed')
+      expect(states.filter((s) => s === 'failed')).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(openCount).toBe(3)
+      collector.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('open() 在途守卫：重建在途时 reattach，后落地者胜出，先到者就地关闭不注册', async () => {
+    vi.useFakeTimers()
+    try {
+      let closeCount = 0
+      let openCount = 0
+      let releaseHang!: (channel: unknown) => void
+      const hangPending = new Promise<unknown>((resolve) => {
+        releaseHang = resolve
+      })
+      const makeHang = () => {
+        const handlers: Record<string, Array<(...args: unknown[]) => void>> = {}
+        const channel = {
+          on: (event: string, cb: (...args: unknown[]) => void) => {
+            ;(handlers[event] ??= []).push(cb)
+            return channel
+          },
+          stderr: { on: () => channel },
+          write: () => true,
+          close: () => {
+            closeCount += 1
+            for (const cb of handlers.close ?? []) cb()
+          }
+        }
+        return channel
+      }
+      const collector = new TmuxCollector(
+        'session-guard',
+        async () => {
+          openCount += 1
+          if (openCount === 1) return (await hangPending) as never
+          return makeChannel((script) => {
+            const seq = /@@OFS:BEGIN:(\d+)@@/.exec(script)?.[1] ?? '1'
+            return `@@OFS:BEGIN:${seq}@@\r\n@@OFS:HASTMUX@@\r\nno\r\n@@OFS:END:${seq}@@\r\n`
+          }).channel as never
+        },
+        { onSnapshot: () => {}, onState: () => {} }
+      )
+      const started = collector.start()
+      // 第一个 open 挂在途中的窗口里，SSH 重连驱动 reattach（第二个通道立即就绪）
+      const reattached = collector.reattach()
+      await vi.advanceTimersByTimeAsync(0)
+      await expect(reattached).resolves.toBeUndefined()
+      // 放行第一个通道：代际已过期 → 就地关闭，不注册监听、不设定时器
+      releaseHang(makeHang())
+      await started
+      expect(closeCount).toBe(1)
+      expect(collector.state).toBe('unsupported')
+      collector.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

@@ -183,4 +183,49 @@ demo       420  8.2  1.5 999999 50000 pts/0    Sl   10:00   1:02 node server.js
     vi.useRealTimers()
   })
 
+  it('open() 在途守卫：start 在途时 reattach 并发，后落地者胜出，先到者就地关闭不注册', async () => {
+    vi.useFakeTimers()
+    let closeCount = 0
+    let openCount = 0
+    let releaseHang!: (channel: unknown) => void
+    const hangPending = new Promise<unknown>((resolve) => {
+      releaseHang = resolve
+    })
+    const makeCh = () => {
+      const handlers: Record<string, Array<(...args: unknown[]) => void>> = {}
+      const channel = {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          ;(handlers[event] ??= []).push(cb)
+          return channel
+        },
+        stderr: { on: () => channel },
+        write: () => true,
+        close: () => {
+          closeCount += 1
+          for (const cb of handlers.close ?? []) cb()
+        }
+      }
+      return channel
+    }
+    const collector = new ProcessPanelCollector(
+      'session-guard',
+      async () => {
+        openCount += 1
+        if (openCount === 1) return (await hangPending) as never
+        return makeCh() as never
+      },
+      { onSnapshot: () => {}, onState: () => {} }
+    )
+    const started = collector.start()
+    // 第一个 open 挂在途中的窗口里，SSH 重连驱动 reattach（第二个通道立即就绪）
+    await collector.reattach()
+    // 放行第一个通道：代际已过期 → 就地关闭，不注册监听、不设定时器
+    releaseHang(makeCh())
+    await started
+    expect(closeCount).toBe(1)
+    collector.stop()
+    expect(closeCount).toBe(2) // stop 只关当前注册的那个通道，孤儿已在落地时关过
+    vi.useRealTimers()
+  })
+
 })

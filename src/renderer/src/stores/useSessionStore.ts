@@ -95,6 +95,12 @@ interface SessionStore {
    * 仍在，重连只会白白推倒重来；连接确实已断时先在内部走一遍正常重连。
    */
   reattachTmuxTab: (id: string) => Promise<void>
+  /**
+   * 附着失败（SSH 连接未断，如 sessionGone）进入已退出态时由 TerminalPane 调用：
+   * 标记「已结束但连接仍在」，让「重新附着」跳过重连直接重开通道。
+   * 连接若确实已断，session:state 非 ready 事件会清掉标记，回到正常重连路径。
+   */
+  noteTmuxAttachFailed: (id: string) => void
 }
 
 /**
@@ -172,8 +178,8 @@ function uniqueTitle(tabs: SessionTab[], base: string): string {
 }
 
 /**
- * 因 **detach**（prefix+d / tmux 客户端退出）进入已退出态的 tmuxAttach 标签。
- * 这时 SSH 连接仍然活着 —— 「重新附着」不需要 session:reconnect，直接重开附着通道。
+ * 进入已退出态但 SSH 连接仍在的 tmuxAttach 标签：detach（prefix+d / tmux 客户端退出）
+ * 与附着失败（sessionGone 等）都算 —— 「重新附着」不 session:reconnect，直接重开附着通道。
  * 断线（session:state 非 ready）会把它清掉，之后重附着走正常重连路径。
  */
 const tmuxDetachedTabs = new Set<string>()
@@ -636,6 +642,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         error: err instanceof Error ? err.message : String(err)
       })
     }
+  },
+
+  noteTmuxAttachFailed: (id) => {
+    tmuxDetachedTabs.add(id)
   },
 
   reattachTmuxTab: async (id) => {

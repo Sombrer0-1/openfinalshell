@@ -60,6 +60,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
   const closeTab = useSessionStore((s) => s.closeTab)
   const reconnectTab = useSessionStore((s) => s.reconnectTab)
   const reattachTmux = useSessionStore((s) => s.reattachTmuxTab)
+  const noteTmuxAttachFailed = useSessionStore((s) => s.noteTmuxAttachFailed)
   const openTmuxPanelTab = useSessionStore((s) => s.openTmuxPanelTab)
   const toggleSftp = useSessionStore((s) => s.toggleSftp)
   const toggleMonitor = useSessionStore((s) => s.toggleMonitor)
@@ -460,7 +461,10 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         if (active && bundleRef.current === bundle) bundle.term.focus()
       })
       .catch((err: Error) => {
-        // 附着失败（如重连期间会话被外部杀掉 → sessionGone）原样透出，已退出浮层给重试
+        // 附着失败（如重连期间会话被外部杀掉 → sessionGone）原样透出，已退出浮层给重试。
+        // 连接本身通常仍在：标记后「重新附着」跳过重连直接重开通道；连接若确实已断，
+        // session:state 非 ready 事件会清掉标记，重新附着回到正常重连路径。
+        if (kind === 'tmuxAttach') noteTmuxAttachFailed(tab.id)
         updateTab(tab.id, { state: 'closed', error: err.message })
       })
       .finally(() => {

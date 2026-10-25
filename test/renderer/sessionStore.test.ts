@@ -634,6 +634,19 @@ describe('tmux 附着标签（tmuxAttach）', () => {
     expect(calls.map(([channel]) => channel)).not.toContain('session:open')
   })
 
+  it('附着失败（连接仍在，如 sessionGone）后「重新附着」同样不走 session:reconnect', async () => {
+    seedAttachTab({ termId: null, everReady: true })
+    // TerminalPane 的附着失败路径：closed 但 SSH 连接仍在（会先调 noteTmuxAttachFailed）
+    useSessionStore.getState().updateTab('tab-1', { state: 'closed', error: '会话已不存在' })
+    useSessionStore.getState().noteTmuxAttachFailed('tab-1')
+
+    await useSessionStore.getState().reattachTmuxTab('tab-1')
+
+    expect(calls.map(([channel]) => channel)).not.toContain('session:reconnect')
+    expect(calls.map(([channel]) => channel)).not.toContain('session:open')
+    expect(tab()).toMatchObject({ state: 'ready', termId: null, shellEpoch: 1 })
+  })
+
   it('连接已断（detach 标记作废）时「重新附着」先走正常重连', async () => {
     seedAttachTab({ termId: null, everReady: true })
     // 连接本身挂了（非 detach）：session:state closed 会让 detach 标记作废
