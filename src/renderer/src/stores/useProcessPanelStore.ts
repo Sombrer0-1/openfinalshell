@@ -49,9 +49,22 @@ export const useProcessPanelStore = create<ProcessPanelStore>((set, get) => ({
     }),
 
   fetchDetail: async (sessionId, pid) => {
+    const key = detailKey(sessionId, pid)
     const detail = await ofs.invoke('processPanel:detail', { sessionId, pid })
     if (detail) {
-      set((s) => ({ details: { ...s.details, [detailKey(sessionId, pid)]: detail } }))
+      set((s) => {
+        const details = { ...s.details, [key]: detail }
+        // 有界缓存：按插入序丢掉最旧条目，避免只写不读时无限增长。
+        const keys = Object.keys(details)
+        if (keys.length > 32) {
+          for (const k of keys) {
+            if (k === key) continue
+            delete details[k]
+            if (Object.keys(details).length <= 32) break
+          }
+        }
+        return { details }
+      })
     }
     return detail
   },

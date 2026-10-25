@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   parseProcessAux,
   parseProcessEo,
@@ -68,20 +68,23 @@ demo       420  8.2  1.5 999999 50000 pts/0    Sl   10:00   1:02 node server.js
     })
   })
 
-  it('列表帧在服务器侧用 ps，并带 NOPS / HASPSSORT 降级哨兵', () => {
+  it('列表帧在服务器侧用 ps，并带 NOPS / HASPSSORT 降级哨兵与 head 截断', () => {
     const probe = buildProcessProbeFrame(3)
     expect(probe).toContain('@@OFS:BEGIN:3@@')
     expect(probe).toContain('@@OFS:HASPSSORT@@')
     expect(probe).toContain('ps -eo pid,user,rss,pcpu,args --sort=-pcpu')
+    expect(probe).toContain('head -n 4001')
     expect(probe).toContain('@@OFS:END:3@@')
 
     const list = buildProcessListFrame(4, true)
     expect(list).toContain('command -v ps')
     expect(list).toContain('@@OFS:NOPS@@')
     expect(list).toContain('--sort=-pcpu')
+    expect(list).toContain('head -n 4001')
 
     const busy = buildProcessListFrame(5, false)
     expect(busy).toContain('ps aux')
+    expect(busy).toContain('head -n 4001')
     expect(busy).not.toContain('--sort=-pcpu')
   })
 
@@ -92,12 +95,20 @@ demo       420  8.2  1.5 999999 50000 pts/0    Sl   10:00   1:02 node server.js
     expect(detail).toContain("/proc/$PID/cwd")
     expect(detail).toContain("/proc/$PID/environ")
     expect(detail).toContain("'42'")
+    // ExecRunner 契约：用 (exit N) 留 $?，禁止提前 exit 跳过 RC 哨兵
+    expect(detail).toContain('(exit 3)')
+    expect(detail).toContain('(exit 0)')
+    expect(detail).not.toMatch(/(?:^|\n)\s*exit\s+\d+/m)
 
     const term = buildProcessKillScript(42, false)
     expect(term).toContain('kill -s TERM --')
     expect(term).toContain("'42'")
+    expect(term).toContain('(exit 3)')
+    expect(term).not.toContain('2>/dev/null')
+    expect(term).not.toMatch(/(?:^|\n)\s*exit\s+\d+/m)
     const kill = buildProcessKillScript(42, true)
     expect(kill).toContain('kill -s KILL --')
+    expect(kill).not.toContain('2>/dev/null')
   })
 
   it('同一 SSH 数据块里的过期帧不会遮蔽当前采样帧', async () => {
@@ -133,4 +144,43 @@ demo       420  8.2  1.5 999999 50000 pts/0    Sl   10:00   1:02 node server.js
 
     await expect(result).resolves.toBe('@@OFS:PROCS@@\n420 demo 100 1.5 node\n')
   })
+  it('SSH 通道意外关闭后会安排 5 秒延迟重启，而不是只计失败后假死', async () => {
+    vi.useFakeTimers()
+    const openCalls: Array<() => void> = []
+    let openCount = 0
+    const collector = new ProcessPanelCollector(
+      'session-restart',
+      async () => {
+        openCount += 1
+        const handlers: Record<string, Array<(...args: unknown[]) => void>> = {}
+        const channel = {
+          on: (event: string, cb: (...args: unknown[]) => void) => {
+            ;(handlers[event] ??= []).push(cb)
+            return channel
+          },
+          stderr: { on: () => channel },
+          write: () => true,
+          close: () => {
+            for (const cb of handlers.close ?? []) cb()
+          }
+        }
+        openCalls.push(() => {
+          for (const cb of handlers.close ?? []) cb()
+        })
+        return channel as never
+      },
+      { onSnapshot: () => {}, onState: () => {} }
+    )
+
+    await collector.start()
+    expect(openCount).toBe(1)
+    // 模拟常驻 sh 被杀
+    openCalls[0]!()
+    expect(openCount).toBe(1)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(openCount).toBe(2)
+    collector.stop()
+    vi.useRealTimers()
+  })
+
 })

@@ -75,11 +75,16 @@ export function ProcessPanelTab({ tab }: Props): React.JSX.Element {
     }
   }, [contextMenu])
 
+  // 详情是低频操作：只在选中变化时拉取，绝不跟列表 snapshot.ts 绑定（否则每 2s
+  // 新开一条 exec 通道回传整份 environ，还和终端/监控争抢 MaxSessions）。
   useEffect(() => {
     if (!sessionId || selectedPid === null) {
       setDetail(null)
+      setDetailLoading(false)
       return
     }
+    // 切换选中先清旧详情，避免短暂展示上一个进程的 cwd/环境变量（常含密钥）。
+    setDetail(null)
     let cancelled = false
     setDetailLoading(true)
     void fetchDetail(sessionId, selectedPid)
@@ -95,7 +100,16 @@ export function ProcessPanelTab({ tab }: Props): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [sessionId, selectedPid, fetchDetail, snapshot?.ts])
+  }, [sessionId, selectedPid, fetchDetail])
+
+  // 选中的进程从列表消失后清掉 selectedPid，避免对死 PID 持续发详情请求。
+  useEffect(() => {
+    if (selectedPid === null || !snapshot) return
+    if (!snapshot.processes.some((row) => row.pid === selectedPid)) {
+      setSelectedPid(null)
+      setDetail(null)
+    }
+  }, [snapshot, selectedPid])
 
   const rows = useMemo(() => {
     const list = snapshot?.processes ?? []
@@ -169,6 +183,17 @@ export function ProcessPanelTab({ tab }: Props): React.JSX.Element {
     return (
       <div className={styles.empty}>
         <Empty description={error || t('processPanel.failed')}>
+          <Button type="primary" icon={<RefreshCw size={15} />} onClick={() => sessionId && void start(sessionId)}>
+            {t('common.retry')}
+          </Button>
+        </Empty>
+      </div>
+    )
+  }
+  if (state === 'stopped') {
+    return (
+      <div className={styles.empty}>
+        <Empty description={t('processPanel.stopped')}>
           <Button type="primary" icon={<RefreshCw size={15} />} onClick={() => sessionId && void start(sessionId)}>
             {t('common.retry')}
           </Button>

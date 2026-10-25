@@ -271,11 +271,29 @@ export class ProcessPanelCollector {
     if (this.channel !== channel) return
     this.channel = null
     this.pause()
+    // 在途帧永远等不到应答了，就地收尾 —— 否则 pending 一直占着，tick() 全被挡掉
     if (this.pending) {
       const { resolve } = this.pending
       this.pending = null
       resolve(null)
     }
-    if (!this.stopped && this.state === 'running') this.onFailure('process panel channel closed')
+    if (this.stopped) return
+    // 通道被杀（如用户在进程面板里误杀了常驻 sh）：5s 后重建。
+    // 整条 SSH 连接断了的情况由 ProcessPanelManager.reattach 在重连成功后驱动。
+    // 对齐 MonitorCollector.onChannelClosed，避免单条 exec 通道死后面板永久假死。
+    log.debug(`session ${this.sessionId}: process panel channel closed, retrying in 5s`)
+    setTimeout(() => {
+      if (this.stopped || this.channel) return
+      void this.restart()
+    }, 5000)
+  }
+
+  private async restart(): Promise<void> {
+    try {
+      this.buffer = ''
+      await this.open()
+    } catch (err) {
+      this.onFailure(err instanceof Error ? err.message : String(err))
+    }
   }
 }

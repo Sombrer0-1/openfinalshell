@@ -35,6 +35,9 @@ class ProcessPanelManager {
     } catch (err) {
       this.collectors.delete(sessionId)
       collector.stop()
+      const message = err instanceof Error ? err.message : String(err)
+      // stop() 会先推 stopped；再推 failed，避免渲染层停在「正在采集」无重试出口。
+      emit('processPanel:state', { sessionId, state: 'failed', error: message })
       throw err
     }
   }
@@ -59,7 +62,8 @@ class ProcessPanelManager {
     const conn = sshManager.get(sessionId)
     const result = await execOnce(conn, buildProcessDetailScript(pid), { timeoutMs: 5000 })
     if (result.code === 3) return null
-    if (result.code !== 0 && result.code !== null) return null
+    // null = 未知退出码（哨兵缺失/断连），永不当成功 —— 对齐 ExecRunner 契约。
+    if (result.code !== 0) return null
     const sections = splitSections(
       // detail 脚本没有 BEGIN/END 帧，只有段哨兵；给 splitSections 包一层假段也行，
       // 但段哨兵本身就能切开 —— 在正文前补一个哑段名无必要，直接喂即可。
