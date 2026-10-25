@@ -158,7 +158,7 @@
     <string name="sync_last_result">Последняя синхронизация: профилей — %1$d, перенаправлений — %2$d, секретов — %3$d, пропущено — %4$d</string>
     <string name="sync_peer_metadata">%1$s:%2$d, версия %3$s</string>
     <string name="notification_channel_connections">Подключения OpenFinalShell</string>
-    <string name="notification_summary">SSH: %1$d, передачи: %2$d, перенаправления: %3$d</string>
+    <string name="notification_summary">Сеансы: %1$d, передачи: %2$d, перенаправления: %3$d</string>
     <string name="notification_reopen_to_restore">Откройте OpenFinalShell снова, чтобы восстановить задачи</string>
     <string name="update_failed">Не удалось завершить обновление.</string>
 </resources>

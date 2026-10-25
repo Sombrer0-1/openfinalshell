@@ -156,7 +156,7 @@
     <string name="sync_last_result">Dernière synchronisation : %1$d profils, %2$d redirections, %3$d secrets, %4$d ignorés</string>
     <string name="sync_peer_metadata">%1$s:%2$d, version %3$s</string>
     <string name="notification_channel_connections">Connexions OpenFinalShell</string>
-    <string name="notification_summary">SSH : %1$d, transferts : %2$d, redirections : %3$d</string>
+    <string name="notification_summary">Sessions : %1$d, transferts : %2$d, redirections : %3$d</string>
     <string name="notification_reopen_to_restore">Rouvrez OpenFinalShell pour restaurer les tâches</string>
     <string name="update_failed">Impossible de terminer la mise à jour.</string>
 </resources>

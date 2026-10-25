@@ -58,10 +58,19 @@ class ConnectionForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Android 12+: every startForegroundService delivery must call startForeground before any
+        // early stopSelf, including ACTION_STOP and empty sticky restarts. Cold-start begin() then
+        // a failed connect that sends STOP was crashing with ForegroundServiceDidNotStartInTimeException
+        // when promote was gated behind business logic (and typed SPECIAL_USE sometimes logged as
+        // "no types" if the service never finished entering the foreground).
+        val connectingHint =
+            intent?.action == ACTION_START || intent?.getBooleanExtra(EXTRA_CONNECTING, false) == true
+        promoteToForeground(connecting = connectingHint)
+
         val restartedBySystem = intent == null
         if (restartedBySystem && liveWorkbench()?.hasBackgroundWork() == true) {
-            // The process survived and still owns sockets. Refresh the notification from the model
-            // instead of treating this as a cold start.
+            // Process survived with sockets. Force a model-driven UPDATE so sticky restart always
+            // re-enters startForeground with live counts (dedupe is cleared inside ensure).
             liveWorkbench()?.ensureBackgroundKeepAlive()
             return START_STICKY
         }
@@ -102,7 +111,7 @@ class ConnectionForegroundService : Service() {
         val sessions = count(KEY_SESSIONS)
         val transfers = count(KEY_TRANSFERS)
         val forwards = count(KEY_FORWARDS)
-        val connecting = intent?.action == ACTION_START || intent?.getBooleanExtra(EXTRA_CONNECTING, false) == true
+        val connecting = connectingHint
         if (!SessionKeepAlivePolicy.keepRunningAfterStart(restartedBySystem, connecting, sessions, transfers, forwards)) {
             // Process death cannot restore TCP. An empty update should not leave a permanent notification.
             if (restartedBySystem) {
@@ -114,7 +123,8 @@ class ConnectionForegroundService : Service() {
             return START_NOT_STICKY
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
-        startInForeground(notification(holding = true, connecting = connecting))
+        // Refresh notification text with persisted counts after prefs write.
+        promoteToForeground(connecting = connecting)
         acquireLocks(renew = false)
         scheduleLockRenew()
         return START_STICKY
@@ -149,9 +159,34 @@ class ConnectionForegroundService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * Enter the foreground immediately with the best notification we can build from prefs.
+     * Must run before any stopSelf path that may have been reached via startForegroundService.
+     */
+    private fun promoteToForeground(connecting: Boolean) {
+        val holding = connecting || SessionKeepAlivePolicy.shouldHold(
+            count(KEY_SESSIONS),
+            count(KEY_TRANSFERS),
+            count(KEY_FORWARDS)
+        )
+        startInForeground(notification(holding = holding || connecting, connecting = connecting))
+    }
+
     private fun startInForeground(notification: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            try {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } catch (error: Throwable) {
+                // API 34+ should accept SPECIAL_USE when the manifest declares it. If the typed
+                // call still fails, fall back so the startForegroundService contract is cleared
+                // and the process is not killed for ForegroundServiceDidNotStartInTimeException.
+                Log.e(TAG, "typed specialUse startForeground failed; falling back", error)
+                startForeground(NOTIFICATION_ID, notification)
+            }
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }

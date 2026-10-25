@@ -33,6 +33,8 @@ dependencies {
     implementation("org.apache.sshd:sshd-mina:2.14.0")
     implementation("org.apache.sshd:sshd-sftp:2.14.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.80")
+    // Apache MINA SSHD Ed25519 host keys / signatures (ssh-ed25519).
+    implementation("net.i2p.crypto:eddsa:0.3.0")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test:2.1.20")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

@@ -157,7 +157,7 @@
     <string name="sync_last_result">마지막 동기화: 프로필 %1$d개, 포워딩 %2$d개, 자격 증명 %3$d개, 건너뜀 %4$d개</string>
     <string name="sync_peer_metadata">%1$s:%2$d, 버전 %3$s</string>
     <string name="notification_channel_connections">OpenFinalShell 연결</string>
-    <string name="notification_summary">SSH: %1$d, 전송: %2$d, 포워딩: %3$d</string>
+    <string name="notification_summary">세션: %1$d, 전송: %2$d, 포워딩: %3$d</string>
     <string name="notification_reopen_to_restore">OpenFinalShell을 다시 열어 작업을 복원하세요</string>
     <string name="update_failed">업데이트를 완료할 수 없습니다.</string>
 </resources>
