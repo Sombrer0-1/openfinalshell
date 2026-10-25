@@ -3,7 +3,7 @@
  *
  * 加一门语言 = 这里加一条 + `src/shared/locales/<tag>.json` 加一份（键与 en-US 全等）。
  * 消费方：AppSettings.language 类型、设置里的语言下拉、App.tsx 的 antd locale 映射、
- * 主进程 i18n、checkI18n 校验器。中/英为人工权威版，其余为 AI 初翻待母语校对
+ * 主进程 i18n、checkI18n 校验器。中/英为人工权威版，其余语言经机器翻译，待母语校对
  * （见各 json 的 `_meta.machineTranslated` 与 agent.md 的 i18n 规范段）。
  *
  * `antd` 是 `antd/locale/<name>` 的文件名；`bundled` 表示该语言包随渲染进程主 bundle

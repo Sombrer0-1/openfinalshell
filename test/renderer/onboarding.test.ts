@@ -16,15 +16,16 @@ describe('compareVersions', () => {
 })
 
 describe('notesSince：取 (from, to] 的更新说明', () => {
-  it('跨版本更新一次看全被跳过的版本，按新→旧', () => {
-    const v = notesSince('0.9.0', '0.12.0').map((n) => n.version)
-    expect(v).toEqual(['0.12.0', '0.11.0', '0.10.0']) // 排除 0.9.0（=from），含到 0.12.0
+  const current = RELEASE_NOTES[0].version
+
+  it('筛出晚于起点且不晚于终点的已登记版本', () => {
+    expect(notesSince('0.0.0', current).map((n) => n.version)).toEqual([current])
   })
-  it('相邻版本只给目标那条', () => {
-    expect(notesSince('0.11.0', '0.12.0').map((n) => n.version)).toEqual(['0.12.0'])
+  it('起点与已登记版本相同时不再给出该版本', () => {
+    expect(notesSince(current, current)).toEqual([])
   })
   it('from 缺省时只给 to 那条', () => {
-    expect(notesSince(undefined, '0.12.0').map((n) => n.version)).toEqual(['0.12.0'])
+    expect(notesSince(undefined, current).map((n) => n.version)).toEqual([current])
   })
   it('每条更新说明都有至少一项、且类型是 feat/fix', () => {
     for (const n of RELEASE_NOTES) {

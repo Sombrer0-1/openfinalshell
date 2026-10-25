@@ -3,7 +3,6 @@ import { Worker } from 'node:worker_threads'
 import { afterAll, describe, expect, it } from 'vitest'
 import { database, databaseFile, closeDatabase, prepare, tx } from '../../src/main/store/Database'
 import { DocStore } from '../../src/main/store/DocStore'
-import { listAiProfiles, saveAiProfile, deleteAiProfile, getAiToken } from '../../src/main/services/aiProfiles'
 import { encField, decField, _resetDataKeyCacheForTests } from '../../src/main/store/crypto'
 import { saveProfile, listConnections, saveGroup, deleteGroup } from '../../src/main/store/connections'
 import type { ProfileDraft } from '@shared/types'
@@ -31,21 +30,6 @@ describe('shared configuration transactions', () => {
     const cipher = encField('kept')
     _resetDataKeyCacheForTests()
     expect(decField(cipher)).toBe('kept')
-  })
-
-  it('rejects stale AI edits before changing the stored token', () => {
-    const a = saveAiProfile({ name: 'A', baseUrl: 'https://example.org/v1', model: 'm', token: 'first-token' })
-    const b = saveAiProfile({ ...a, expectedUpdatedAt: a.updatedAt, model: 'new-model', token: 'second-token' })
-    expect(() => saveAiProfile({ ...a, expectedUpdatedAt: a.updatedAt, model: 'stale', token: 'stale-token' })).toThrow('CONFIG_CONFLICT')
-    expect(getAiToken(a.id).token).toBe('second-token')
-    expect(getAiToken(a.id).profile.model).toBe(b.model)
-    expect(JSON.stringify(listAiProfiles())).not.toContain('second-token')
-  })
-
-  it('initializes AI defaults once, including after all profiles have been deleted', () => {
-    listAiProfiles()
-    for (const p of listAiProfiles()) deleteAiProfile(p.id)
-    expect(listAiProfiles()).toEqual([])
   })
 
   it('preserves different connections and rejects the second stale save of the same one', () => {

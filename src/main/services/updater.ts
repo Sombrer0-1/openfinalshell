@@ -20,7 +20,6 @@ import { checkLatestRelease } from './manualUpdateCheck'
 import { instanceCoordinator } from '../instances/service'
 import { portTrafficManager } from '../monitor/PortTrafficManager'
 import { lanSyncManager } from '../lansync/LanSyncManager'
-import { cancelAllAi } from './aiService'
 import { requestEditorCloseForQuit } from '../editorWindow'
 import { currentInstance } from '../instance'
 
@@ -231,7 +230,6 @@ export async function installUpdate(force: boolean): Promise<UpdateInstallResult
     monitorManager.stopAll()
     portTrafficManager.stopAll()
     lanSyncManager.stopAll()
-    cancelAllAi()
     forwardManager.stopAll()
     sshManager.closeAll()
     await rdpSessionManager.closeAll()

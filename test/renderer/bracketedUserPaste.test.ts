@@ -22,13 +22,9 @@ describe('用户粘贴的 bracketed paste', () => {
     )
   })
 
-  it('终端面板不借用 AI 填入的准备函数', () => {
+  it('终端面板调用普通粘贴函数', () => {
     const pane = stripComments(read('src/renderer/src/features/terminal/TerminalPane.tsx'))
-    const paste = stripComments(read('src/renderer/src/features/terminal/bracketedUserPaste.ts'))
     expect(pane).toContain('bracketedUserPaste(')
-    expect(pane).not.toContain('prepareTerminalPaste')
-    expect(pane).not.toContain('terminalPaste')
-    expect(paste).not.toContain('prepareTerminalPaste')
-    expect(paste).not.toContain('features/ai')
+    expect(pane).toContain('plainUserPaste(')
   })
 })

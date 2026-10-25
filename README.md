@@ -1,6 +1,6 @@
 # OpenFinalShell
 
-OpenFinalShell 是一个开源、跨平台的远程运维工作台，集成 SSH 终端、SFTP 文件管理、嵌入式 RDP 远程桌面、AI 助手、在线编辑、服务器监控和端口转发。你可以在同一应用中管理 Linux 服务器和 Windows 远程桌面，传输文件、修改配置、查看运行状态，并按需调用自己的 AI API 辅助排障。
+OpenFinalShell 是一个开源、跨平台的远程运维工作台，集成 SSH 终端、SFTP 文件管理、嵌入式 RDP 远程桌面、在线编辑、服务器监控和端口转发。你可以在同一应用中管理 Linux 服务器和 Windows 远程桌面，传输文件、修改配置并查看运行状态。
 
 项目为**桌面端**应用：基于 Electron、React 和 TypeScript，提供 Windows x86/x64/ARM64、macOS Intel x64 / Apple Silicon ARM64、Linux x64/ARM64 安装包；Flatpak 目前仅提供 x64。
 
@@ -8,23 +8,22 @@ OpenFinalShell 是一个开源、跨平台的远程运维工作台，集成 SSH 
 
 - **SSH / SFTP**：多标签终端、搜索与命令历史、拖拽上传、文件冲突处理、传输队列和断点续传，支持独立窗口编辑远程文件。
 - **RDP 远程桌面**：在标签页内连接远程桌面，支持键鼠操作和窗口自适应；Windows x64 支持原生文件双向复制粘贴、本地文件拖入远程桌面和远程音频播放。
-- **AI 助手**：接入 OpenAI、DeepSeek 或第三方兼容 API，获取模型列表、检测图片输入、选择流式或非流式回答，将回答中的命令复制或手动填入 SSH。
 - **服务器监控与转发**：CPU、内存、磁盘、网络、进程、连接数、双延迟和端口流量视图；支持本地、远程及动态 SOCKS5 转发。
 - **Windows 多实例**：在设置中开启多个独立窗口，连接配置和凭据共享，会话、传输和窗口退出互相隔离。
 - **数据与界面**：系统安全存储、加密导入导出、局域网配对传送、10 种界面语言、主题和缩放设置。
 
 下表按当前代码和发布配置列出各桌面平台支持情况；构建通过不等于已完成所有远程服务器、文件管理器和显示环境的实机验收。
 
-| 平台 | SSH / SFTP | 嵌入式 RDP | RDP 原生双向文件粘贴 | AI 助手 | 独立多实例窗口 |
-| --- | --- | --- | --- | --- | --- |
-| Windows x64 | 支持 | 支持 | Windows Explorer | 支持 | 支持，设置中开启 |
-| Windows x86 / ARM64 | 支持 | 未打包 Worker，可使用系统 RDP | 由系统 RDP 客户端提供 | 支持 | 支持，设置中开启 |
-| macOS x64 / ARM64 | 支持 | 真实 FreeRDP Worker | 缓存后原生粘贴已接入，待实机验收、默认关闭 | 支持 | 已适配，待验收 |
-| Linux x64 / ARM64 | 支持 | 真实 FreeRDP Worker | 缓存后原生粘贴已接入，待实机验收、默认关闭 | 支持 | 已适配，待验收 |
+| 平台 | SSH / SFTP | 嵌入式 RDP | RDP 原生双向文件粘贴 | 独立多实例窗口 |
+| --- | --- | --- | --- | --- |
+| Windows x64 | 支持 | 支持 | Windows Explorer | 支持，设置中开启 |
+| Windows x86 / ARM64 | 支持 | 未打包 Worker，可使用系统 RDP | 由系统 RDP 客户端提供 | 支持，设置中开启 |
+| macOS x64 / ARM64 | 支持 | 真实 FreeRDP Worker | 缓存后原生粘贴已接入，待实机验收、默认关闭 | 已适配，待验收 |
+| Linux x64 / ARM64 | 支持 | 真实 FreeRDP Worker | 缓存后原生粘贴已接入，待实机验收、默认关闭 | 已适配，待验收 |
 
 macOS/Linux 的 RDP 基础连接、画面、键鼠和缩放已有实现。本轮将文本剪贴板替换为 macOS NSPasteboard 与 Linux GTK3 原生接口，不再依赖 `pbcopy`、`xclip` 或 `wl-clipboard`。文件粘贴采用完整下载到私有缓存后再发布文件 URL 的方式；新增音频后端和多实例适配仍受实机验收门槛控制。当前仅有 Windows 验证环境，不能将这些代码接入视为 macOS/Linux 正式验收通过。系统 RDP 入口仍通过 `.rdp` 文件调用已安装的默认处理程序。
 
-[下载最新版本](https://github.com/kexue-aihao/openfinalshell/releases/latest) · [多实例说明](docs/multi-instance.md) · [AI 模型与图片检测](docs/ai-model-capabilities.md) · [RDP 文件传输诊断](docs/rdp-clipboard-debugging.md)
+[下载最新版本](https://github.com/kexue-aihao/openfinalshell/releases/latest) · [多实例说明](docs/multi-instance.md) · [RDP 文件传输诊断](docs/rdp-clipboard-debugging.md)
 
 ---
 
@@ -76,30 +75,13 @@ macOS/Linux 的 RDP 基础连接、画面、键鼠和缩放已有实现。本轮
 
 原生文件粘贴依赖服务端允许剪贴板重定向。当前限制为最多 64 个文件/目录条目、单文件 8 GiB、合计 32 GiB；拒绝符号链接及不安全的相对路径。macOS/Linux 不作为原生双向文件粘贴已完成的平台，详见上方支持表。
 
-### AI 助手
-
-在 **设置 → AI 助手** 开启功能，添加服务名称、API Base URL、Token 和模型；随后可从侧栏 AI 图标或 SSH 终端工具条打开独立的助手面板，无需先选中文字。
-
-- 支持 OpenAI 官方、DeepSeek 官方及 OpenAI Chat Completions 兼容服务，可保存并切换多个服务配置。
-- 填写 API 地址和 Token 后点击“获取模型”，通过 `/models` 获取列表并在可搜索下拉框中选择，也支持手动填写模型名称。
-- “测试连接”显示请求耗时，包含网络传输和模型处理；“测试图片输入”单独检查当前接口是否接受图片请求。
-- 支持文字和 PNG / JPEG / WebP / GIF 图片输入，当前面板每次可附加一张不超过 8 MiB 的图片；实际图片理解能力取决于模型与网关。
-- 可选择流式或非流式响应，支持停止生成、清空当前回答和错误提示。
-- 选中终端文本后可显式发送给 AI，用于解释错误、解释命令、生成修复方案或自定义提问；不会自动读取整段终端历史、服务器文件或登录凭据。
-- 回答中的 shell 命令提供“复制”和“填入 SSH”，可以选择目标 SSH 终端。填入不发送回车；多行命令需要终端启用 bracketed paste。
-- Token 由主进程保存到系统安全存储，查询配置只返回是否已设置。AI 配置和 Token 不进入普通数据导出或局域网同步。
-
-功能默认关闭，API 费用由所选服务商收取。Base URL 通常填写到 `/v1`，程序追加 `/chat/completions`；第三方接口可保留自己的路径前缀。仅允许 HTTPS，本机 `localhost`、`127.0.0.1`、`::1` 可使用 HTTP。当前每次发送仅提交本次填写/选中的文本与图片，不自动携带之前问答，也不持久化聊天记录。单条文本上限为 32,768 个字符。
-
-模型列表中的“图片未声明”不表示模型不可用；可用“测试图片输入”进一步检查。接口接受测试图片也不能证明它实际理解了图片，详细判定规则见 [AI 模型与图片检测](docs/ai-model-capabilities.md)。
-
 ### Windows 多实例窗口
 
 在 **设置 → 常规 → 允许多实例窗口** 开启或关闭，无需重启。默认关闭；普通双击始终优先聚焦已有默认窗口。
 
 - 开启后可通过左上角应用名称菜单、`Ctrl+Shift+N`、任务栏“打开新窗口”或 `OpenFinalShell.exe --new-instance` 创建独立进程和窗口。
-- 各窗口的 SSH/RDP 会话、终端、传输、监控、端口转发和 AI 请求互相隔离；关闭一个窗口只清理自己的资源。
-- 连接、AI 服务配置和凭据共享。配置变更自动刷新，编辑过期版本会提示冲突；已连接会话不被配置刷新替换。
+- 各窗口的 SSH/RDP 会话、终端、传输、监控和端口转发互相隔离；关闭一个窗口只清理自己的资源。
+- 连接配置和凭据共享。配置变更自动刷新，编辑过期版本会提示冲突；已连接会话不被配置刷新替换。
 - 关闭开关只禁止新建实例，已有窗口、会话和传输继续运行；偏好跨重启保留。
 - 安装更新由协调实例统一处理，等待其他实例清理并退出；超时显示仍在运行的实例，不强制结束进程。
 
@@ -174,12 +156,12 @@ macOS/Linux 的 RDP 基础连接、画面、键鼠和缩放已有实现。本轮
 
 ### 界面与设置
 
-设置页提供十个区段：常规 / 外观 / AI 助手 / 终端 / 传输与监控 / 代理与私钥 / 安全与数据 / 局域网同步 / 快捷键 / 关于。
+设置页提供九个区段：常规 / 外观 / 终端 / 传输与监控 / 代理与私钥 / 安全与数据 / 局域网同步 / 快捷键 / 关于。
 
 - 深色 / 浅色 / 跟随系统，8 种强调色，界面缩放 90%–150%
 - 10 种界面语言：简体中文、繁体中文、英语、日语、韩语、俄语、西班牙语、法语、德语和巴西葡萄牙语；部分新增文案及机器翻译仍需母语校对。
 - 关闭标签前确认（仅在会话仍连接时问）、禁用硬件加速（老显卡黑屏时用）
-- 侧栏四个视图：连接 / 快捷命令 / 端口转发 / 传输队列；启用 AI 后增加助手入口。面板尺寸与折叠状态会保留，标题栏使用统一软件 Logo。
+- 侧栏四个视图：连接 / 快捷命令 / 端口转发 / 传输队列。面板尺寸与折叠状态会保留，标题栏使用统一软件 Logo。
 
 | 快捷键 | 作用 |
 |---|---|
@@ -277,7 +259,7 @@ Electron 43 + React 18 + TypeScript · [ssh2](https://github.com/mscdex/ssh2) ·
 
 ```
 src/shared    IPC 契约、共享类型与常量（禁止运行时依赖）
-src/main      SSH / SFTP / RDP 会话 / AI / 监控 / 转发 / 存储 / 实例协调
+src/main      SSH / SFTP / RDP 会话 / 监控 / 转发 / 存储 / 实例协调
 src/preload   白名单桥
 src/renderer  React 界面（features 按功能分目录，stores 用 zustand）
 native        FreeRDP Worker、剪贴板与协议测试
@@ -306,7 +288,7 @@ npm run dev
 | `npm run check:deb` | 检查 deb 元数据、依赖、desktop entry 与安装路径 |
 | `npm run package:dir` | 只打免安装目录，用于快速验证 |
 | `npm run smoke:packaged` | 驱动打包产物跑端到端冒烟 |
-| `npm run smoke:multi-instance` | Windows 真实多进程 SSH / SFTP / Vault / AI 隔离测试 |
+| `npm run smoke:multi-instance` | Windows 真实多进程 SSH / SFTP / Vault 隔离测试 |
 | `npm run build:rdp-worker -- --platform win --arch x64 --require-freerdp` | 构建真实 Windows x64 RDP Worker；其他目标使用 `mac` / `linux` 和对应架构 |
 | `npm run check:rdp-worker -- --platform win --arch x64 --require-freerdp` | 校验 Worker、运行库与发布能力 |
 | `npm run icon` | 重新生成应用图标 |
@@ -523,31 +505,15 @@ git push origin vX.Y.Z
 
 **RDP 平台边界**：Windows x64 的 Explorer 文件剪贴板和 WinMM 音频已有实现；macOS/Linux 已构建真实 Worker，但原生双向文件剪贴板与音频后端尚未完成。Windows x86/ARM64 不打包真实 Worker，使用系统客户端入口。详情见开头的平台支持表。
 
-**AI 边界**：当前使用 OpenAI Chat Completions 兼容协议，不提供 OpenAI Responses / Anthropic 原生协议、自定义请求模板、自动执行服务器命令或持久化多轮会话。模型与图片能力以实际网关支持为准；系统安全存储不可用时无法保存 AI Token。
+**当前未提供**：Telnet / 串口 / VNC、RDP 打印机/磁盘/摄像头/多显示器重定向、音频采集、与 OpenSSH `known_hosts` 文件互通、GSSAPI 认证、配置云同步、FinalShell 密码解密。普通数据导出与 LAN Sync 不包含命令历史和托管私钥内容。
 
-**当前未提供**：Telnet / 串口 / VNC、RDP 打印机/磁盘/摄像头/多显示器重定向、音频采集、与 OpenSSH `known_hosts` 文件互通、GSSAPI 认证、配置云同步、FinalShell 密码解密。普通数据导出与 LAN Sync 不包含 AI 服务配置、AI Token、AI 问答及托管私钥内容。
+## 当前交付
 
-## 路线图
-
-| 里程碑 | 内容 | 状态 |
-|---|---|---|
-| M0 | 脚手架 · IPC 契约 · 安全基线 · 主题与布局壳 | ✅ |
-| M1 | 加密凭据 · 连接管理 · SSH 会话 · 终端（批处理 + 背压） | ✅ |
-| M2 | 多标签会话 · keyboard-interactive / agent 认证 · 断线重连 · 快捷命令 | ✅ |
-| M3 | SFTP 浏览与传输队列（并发窗口 + 断点续传 + 拖拽） | ✅ |
-| M4 | 实时服务器监控面板（CPU / 内存 / 网络 / 磁盘 / 连接数） | ✅ |
-| M5 | 端口转发（本地 / 远程 / 动态 SOCKS5） | ✅ |
-| M6 | 设置页 · 打包发布 · 性能与视觉打磨 | ✅ |
-| v0.1.x | HTTP/SOCKS5 代理拨号 · SQLite 存储 · 数据导出导入 · 快速删除 · 打包下载 | ✅ |
-| v0.2 | 内置编辑器接管"打开"，可改可存回；删掉外部编辑器整条路 | ✅ |
-| v0.2.x | 命令历史：记终端里真正执行过的命令，浮层过滤 / 回填 / 清空，落库 | ✅ |
-| v0.2.x | 命令编辑器：多行命令临时拼装 → 发到当前 / 所有会话 | ✅ |
-| v0.2.x | 从 FinalShell 导入连接与分组（密码除外，见已知限制） | ✅ |
-| 已实现 | SFTP 同名冲突处理、跟随终端目录、独立编辑器窗口、双延迟及端口流量 | ✅ |
-| v0.30.x | 嵌入式 FreeRDP 桌面、自适应显示；Windows x64 文件拖放/双向粘贴和音频 | 已提供，平台差异见支持表 |
-| v0.30.x | AI 服务配置、模型列表、图片检测、流式/非流式响应、命令复制与填入 SSH | ✅ 桌面端 |
-| v0.30.x | Windows 多实例设置开关、运行态隔离、配置共享及更新协调 | ✅ Windows |
-| 已实现 | Windows 安装版应用内更新 | ✅ |
+- SSH 终端、SFTP 文件管理、传输队列、远程编辑、快捷命令和命令历史
+- 嵌入式 RDP；Windows x64 提供文件拖放、双向粘贴和音频，其余平台差异见支持表
+- 服务器监控、端口流量，以及本地 / 远程 / 动态 SOCKS5 转发
+- Windows 多实例窗口：会话隔离、配置与凭据共享、更新协调
+- 加密导出导入、局域网同步、系统账户绑定的凭据存储，以及 Windows 安装版应用内更新
 
 待完善：macOS/Linux 原生 RDP 文件剪贴板与音频、这些平台的多实例验收、Windows x86/ARM64 嵌入式 Worker、跳板机 ProxyJump、主密码保险库、传输队列持久化、上传方向打包传输和快捷键改键。此列表不代表交付日期或已开放能力。
 

@@ -8,13 +8,6 @@
  *  - EventMap   main → renderer 事件（webContents.send）
  */
 import type {
-  AiChatMessage,
-  AiConnectionTestResult,
-  AiModelInfo,
-  AiModelEndpointDraft,
-  AiImageCapabilityTestResult,
-  AiProviderProfile,
-  AiProviderProfileDraft,
   AppSettings,
   AppVersions,
   CommandHistoryEntry,
@@ -89,15 +82,6 @@ export interface InvokeMap {
   'rdp:clipboardCancel': { args: [SessionId]; result: void }
   'app:newWindow': { args: []; result: void }
   'app:instanceInfo': { args: []; result: { instanceId: string; pid: number; multiInstanceSupported: boolean; canOpenNewWindow: boolean } }
-  // --- AI assistant ---
-  'ai:profiles:list': { args: []; result: AiProviderProfile[] }
-  'ai:profiles:save': { args: [AiProviderProfileDraft]; result: AiProviderProfile }
-  'ai:profiles:delete': { args: [string]; result: void }
-  'ai:connectionTest': { args: [{ profileId: string }]; result: AiConnectionTestResult }
-  'ai:models:discover': { args: [AiModelEndpointDraft]; result: AiModelInfo[] }
-  'ai:model:capabilityTest': { args: [AiModelEndpointDraft & { model: string }]; result: AiImageCapabilityTestResult }
-  'ai:chat': { args: [{ requestId: string; profileId: string; messages: AiChatMessage[]; stream?: boolean }]; result: void }
-  'ai:cancel': { args: [string]; result: void }
 
   // --- 国际化：懒加载语言包（en/zh 已随渲染 bundle 内联，其余按需取回） ---
   'i18n:bundle': { args: [string]; result: Record<string, unknown> }
@@ -429,11 +413,7 @@ export interface SendMap {
 // ---------------------------------------------------------------------------
 export interface EventMap {
   'rdp:capabilities': RdpCapabilityEvent
-  'app:configChanged': { entity: 'connections' | 'references' | 'ai' | 'settings' | 'snippets' | 'forwards'; revision: number; sourceInstanceId: string }
-  'ai:delta': { requestId: string; text: string }
-  'ai:completed': { requestId: string }
-  'ai:error': { requestId: string; code: string; message: string }
-  'ai:cancelled': { requestId: string }
+  'app:configChanged': { entity: 'connections' | 'references' | 'settings' | 'snippets' | 'forwards'; revision: number; sourceInstanceId: string }
   'session:state': { sessionId: SessionId; state: SessionState; error?: string }
   /** 认证/信任交互请求（应答走 invoke session:promptReply） */
   'session:prompt': SessionPrompt
@@ -483,7 +463,6 @@ export interface EventMap {
 // channel 名前缀白名单（preload 校验用）
 // ---------------------------------------------------------------------------
 export const CHANNEL_PREFIXES = [
-  'ai:',
   'app:',
   'i18n:',
   'settings:',
@@ -542,14 +521,6 @@ export const INVOKE_CHANNELS = channelSet<InvokeChannel>({
   'rdp:clipboardCancel': true,
   'app:newWindow': true,
   'app:instanceInfo': true,
-  'ai:profiles:list': true,
-  'ai:profiles:save': true,
-  'ai:profiles:delete': true,
-  'ai:connectionTest': true,
-  'ai:models:discover': true,
-  'ai:model:capabilityTest': true,
-  'ai:chat': true,
-  'ai:cancel': true,
   'i18n:bundle': true,
   'app:getVersions': true,
   'app:getStartupNotice': true,
@@ -660,10 +631,6 @@ export const SEND_CHANNELS = channelSet<SendChannel>({
 export const EVENT_CHANNELS = channelSet<EventChannel>({
   'rdp:capabilities': true,
   'app:configChanged': true,
-  'ai:delta': true,
-  'ai:completed': true,
-  'ai:error': true,
-  'ai:cancelled': true,
   'session:state': true,
   'session:prompt': true,
   'rdp:state': true,

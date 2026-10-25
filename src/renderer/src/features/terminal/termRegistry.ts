@@ -2,7 +2,6 @@ import type { Terminal } from '@xterm/xterm'
 import type { TermId } from '@shared/types'
 import { ofs } from '@/ipc/api'
 import { PromptTracker } from './commandCapture'
-import { prepareTerminalPaste, type TerminalPasteIssue } from './terminalPaste'
 
 /**
  * termId → xterm 实例注册表（模块级，绕过 React/store —— 终端字节流永不进 store）。
@@ -83,20 +82,4 @@ export function unregisterTerm(termId: TermId): void {
 
 export function getTerm(termId: TermId): Terminal | undefined {
   return terminals.get(termId)
-}
-
-export function registeredTermPasteIssue(termId: TermId, data: string): TerminalPasteIssue | 'unavailable' | undefined {
-  const term = terminals.get(termId)
-  return term ? prepareTerminalPaste(data, term.modes.bracketedPasteMode).issue : 'unavailable'
-}
-
-/** Fill user-selected text, respecting the terminal's negotiated paste mode. */
-export function writeToRegisteredTerm(termId: TermId, data: string): boolean {
-  const term = terminals.get(termId)
-  if (!term) return false
-  const paste = prepareTerminalPaste(data, term.modes.bracketedPasteMode)
-  if (paste.issue) return false
-  noteProgrammaticWrite(termId)
-  ofs.send('term:input', { termId, data: paste.data })
-  return true
 }

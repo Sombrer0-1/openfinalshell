@@ -42,6 +42,6 @@ Ant Design retains forms, connection trees, virtual tables, menus, tooltips, mod
 
 Run the existing type, i18n, test, build and bundle checks. `npm run smoke:ui -- after` drives the real built Electron app with isolated data, local SSH/SFTP fixtures and the production CSP. It records screenshots, assertions and performance samples under the ignored `.local/ui-refresh/after/` directory. Pass a packaged executable as the second argument to test the packaged application.
 
-The full packaged SSH/SFTP regression remains `npm run smoke:packaged -- <exe> <fixture-port> <cdp-port>`. It uses the local `testSshServer.mjs` fixture. UI smoke does not call AI services or connect to production servers. RDP interoperability and macOS/Linux native-window acceptance require their respective environments.
+The full packaged SSH/SFTP regression remains `npm run smoke:packaged -- <exe> <fixture-port> <cdp-port>`. It uses the local `testSshServer.mjs` fixture. UI smoke does not connect to production servers. RDP interoperability and macOS/Linux native-window acceptance require their respective environments.
 
 Implementation milestones, measured bundle sizes, local evidence and remaining platform acceptance are recorded in [desktop-ui-refresh-validation.md](desktop-ui-refresh-validation.md).

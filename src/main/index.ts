@@ -22,7 +22,6 @@ import { registerSavedRefsIpc } from './ipc/savedRefs.ipc'
 import { registerUpdateIpc } from './ipc/update.ipc'
 import { registerSyncIpc } from './ipc/sync.ipc'
 import { registerRdpIpc } from './ipc/rdp.ipc'
-import { registerAiIpc } from './ipc/ai.ipc'
 import { monitorManager } from './monitor/MonitorManager'
 import { portTrafficManager } from './monitor/PortTrafficManager'
 import { forwardManager } from './forward/ForwardManager'
@@ -44,7 +43,6 @@ import { startUpdateChecks, stopUpdateChecks, updateActivity, updateState, check
 
 import { instanceCoordinator, startInstanceCoordinator } from './instances/service'
 import { multiInstanceAvailable, multiInstanceSupported, refreshNewWindowTask } from './instances/newWindowPolicy'
-import { cancelAllAi } from './services/aiService'
 import { metaSet } from './store/Database'
 import { configureInstanceStorage, finishStorageBootstrap, releaseStorageBootstrap } from './instances/storage'
 import { t } from './services/i18n'
@@ -205,7 +203,6 @@ if (!ownsSingleInstanceLock) {
     registerEditorIpc()
     registerSyncIpc()
     registerRdpIpc()
-    registerAiIpc()
     windowCreationReady = true
 
     // This directory belongs exclusively to this UUID; never remove another process's files.
@@ -236,7 +233,6 @@ if (!ownsSingleInstanceLock) {
       if (!await requestEditorCloseForQuit()) { quitCleanupStarted = false; return }
       instance.closing = true
       stopUpdateChecks()
-      cancelAllAi()
       transferQueue.cancelAll()
       monitorManager.stopAll()
       portTrafficManager.stopAll()

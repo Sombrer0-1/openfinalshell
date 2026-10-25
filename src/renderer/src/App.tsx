@@ -19,7 +19,6 @@ import { wireForwardEvents } from '@/stores/useForwardStore'
 import { wireUpdateEvents } from '@/stores/useUpdateStore'
 import { wireLanSyncEvents } from '@/stores/useLanSyncStore'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { AiAssistantModal } from '@/features/ai/AiAssistantModal'
 import { wireConfigRefresh } from '@/stores/configRefresh'
 
 export default function App(): React.JSX.Element {
@@ -60,7 +59,6 @@ export default function App(): React.JSX.Element {
           <PromptHost />
           <TransferDrawer />
           <SettingsModal />
-          <AiAssistantModal />
           {/* 挂在这里而不是快捷命令面板里：侧栏切到别的视图时那个面板会卸载，
               而命令编辑器开着的时候不该跟着消失（草稿也就跟着没了） */}
           <CommandEditorModal />

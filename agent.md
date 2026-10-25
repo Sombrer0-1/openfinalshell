@@ -11,11 +11,11 @@ Windows PowerShell 5.1 向原生程序传参时，字符串内的 `"` 会破坏�
 **本项目面向全球多语种。任何用户可见的文案都必须走 i18n，禁止硬编码中文/英文串。** 新增功能时同步做多语种，否则不算完成。
 
 - **语言唯一来源**：`src/shared/locales/*.json`（主/渲染共用，当前 10 种）。注册表 `src/shared/locales/registry.ts` 是"支持哪些语言"的唯一枚举点。**加一门语言 = 注册表加一条 + 加一份 `<tag>.json`（键与 en-US 全等）**，其它枚举点（设置下拉、antd locale、AppSettings.language 类型、checkI18n）都从注册表/目录派生，无需再改。
-- **权威 vs 机器翻译**：`en-US`、`zh-CN` 为人工权威版；其余语言为 AI 初翻，文件头 `_meta.machineTranslated: true` 标注**待母语校对**，改这些语言的文案以人工校对为准。
+- **权威 vs 机器翻译**：`en-US`、`zh-CN` 为人工权威版；其余语言经机器翻译，文件头 `_meta.machineTranslated: true` 标注**待母语校对**，改这些语言的文案以人工校对为准。
 - **怎么用**：
   - 渲染层：`const { t } = useTranslation()` 或 `import i18n from '@/i18n'; i18n.t(...)`（store/hook 里用后者）。
   - 主进程：`import { t } from '<相对路径>/services/i18n'`。主进程没有 react-i18next，但**报错文案也要翻译** —— 一律 `t('err.<模块>.<名>', { 变量 })`，别再 `throw new Error('中文')`。
-  - 新增文案：先在 `en-US.json` + `zh-CN.json` 加键（人工），其余 8 种语言同步补齐（可先 = 英文占位或 AI 初翻并保持 `_meta` 标注）。
+  - 新增文案：先在 `en-US.json` + `zh-CN.json` 加键（人工），其余 8 种语言同步补齐（可先使用英文占位或机器翻译，并保持 `_meta` 标注）。
 - **提交前必过 `npm run check:i18n`**：校验 N 种语言键**完全一致**、代码里 `t()` 用到的键都已定义、没有游离键。动态拼接的键（`t(\`region.${code}\`)`）用脚本里的 `DYNAMIC_PREFIXES` 白名单登记。
 - **插值陷阱**：字符串里**不要**出现 `{{host}}` 这种字面量占位（i18next 会当插值清空它）。要展示占位符名本身时用 JSX 拼（见 `commandEditor.expandVarsHint`）。
 - **刻意不入 i18n 的例外**：语言下拉里各语言的自称（endonym）、编辑器状态栏的语言名（专有名词）、终端预览里的 CJK 对齐样例；`releaseNotes.ts` 走 zh/en 双语通道、其余语言回退英文（更新说明属历史内容，不逐版翻 10 种）。
@@ -99,8 +99,8 @@ Windows PowerShell 5.1 向原生程序传参时，字符串内的 `"` 会破坏�
 
 ## 项目概览
 
-开源 FinalShell —— Electron + React + ssh2 + xterm.js 的桌面 SSH 客户端（SSH 终端 + SFTP + 服务器监控 + 端口转发）。
+开源远程运维工作台 —— Electron + React + ssh2 + xterm.js，提供 SSH 终端、SFTP、嵌入式 RDP、远程编辑、服务器监控与端口转发。
 
 - 构建：`npm run dev`（electron-vite HMR）、`npm run build`、`npm run typecheck`
-- 结构：`src/shared`（IPC 契约唯一事实来源）/ `src/main`（全部 SSH/SFTP/监控/转发逻辑）/ `src/preload` / `src/renderer`
+- 结构：`src/shared`（IPC 契约唯一事实来源）/ `src/main`（SSH、SFTP、RDP 会话、监控、转发、存储与实例协调）/ `src/preload` / `src/renderer` / `native`（FreeRDP Worker）
 - 安全红线：contextIsolation + sandbox；凭据走 Vault(safeStorage) credentialRef 模式，明文永不回传 renderer；零 native 硬依赖（运行时依赖四个，全无 native）

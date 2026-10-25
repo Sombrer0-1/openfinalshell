@@ -630,11 +630,8 @@ jobs:
           > **Windows 安装版卸载会清空本机数据。** 卸载前请先用「设置 → 安全与数据 → 导出」备份。
           > Linux 覆盖升级和卸载会保留 `~/.config/OpenFinalShell`。
 
-          > **首次启动会把旧的 JSON 配置迁进 SQLite**（`userData/config/openfinalshell.db`），
-          > 原文件改名 `*.migrated` 保留不删，映射有偏差还能人工找回。
-
           > 凭据加密走 Windows DPAPI，密文与当前系统账户绑定，换机或重装系统后解不开。
-          > 迁移走「导出并勾选含密码」→ 新机「选择文件导入…」填同一口令：
+          > 换机请用「设置 → 安全与数据 → 导出」并勾选含密码，到新机「选择文件导入…」填同一口令：
           > 那一段是用导出口令重新加密的，不依赖 DPAPI。
           EOF
           version_notes="docs/releases/$GITHUB_REF_NAME.md"

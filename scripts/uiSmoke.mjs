@@ -111,7 +111,7 @@ try {
   await send('Runtime.enable')
   await send('Log.enable')
   await waitFor('window.ofs && document.querySelector("nav button")')
-  await patchSettings({ language: 'en-US', aiAssistantEnabled: true })
+  await patchSettings({ language: 'en-US' })
   await closeModal()
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
   for (const themeMode of ['dark', 'light']) {
@@ -175,9 +175,6 @@ try {
       await pause(350)
     }
     await patchSettings({ language:'en-US' })
-    await clickButton('AI Assistant')
-    await shot('ai-dark')
-    await closeModal()
     for (const features of [[{name:'prefers-reduced-motion',value:'reduce'}],[{name:'prefers-reduced-transparency',value:'reduce'}],[{name:'prefers-contrast',value:'more'}],[{name:'forced-colors',value:'active'}]]) {
       await send('Emulation.setEmulatedMedia',{features})
       await shot(features[0].name)

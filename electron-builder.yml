@@ -87,7 +87,7 @@ linux:
 deb:
   packageCategory: net
   packageName: openfinalshell
-  synopsis: Remote operations workspace with SSH, SFTP, RDP, AI assistance and monitoring
+  synopsis: Remote operations workspace with SSH, SFTP, RDP and monitoring
   # 依赖项针对 Debian 13，不把它伪装成可直接安装于所有 Debian 系发行版的包。
   artifactName: ${productName}-${version}-debian13-${arch}.${ext}
   # electron-builder 26 的默认包名仍是 Debian 12 时代的非 t64 名称；
@@ -130,7 +130,7 @@ deb:
 rpm:
   packageCategory: Applications/Internet
   packageName: openfinalshell
-  synopsis: Remote operations workspace with SSH, SFTP, RDP, AI assistance and monitoring
+  synopsis: Remote operations workspace with SSH, SFTP, RDP and monitoring
 
 appImage:
   artifactName: ${productName}-${version}-linux-${arch}.${ext}

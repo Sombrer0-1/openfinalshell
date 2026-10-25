@@ -1,8 +1,7 @@
-/** Real Electron processes + local SSH/SFTP + mock AI HTTP. Never uses the user's configuration. */
+/** Real Electron processes + local SSH/SFTP. Never uses the user's configuration. */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createServer as tcpServer } from 'node:net'
-import { createServer as httpServer } from 'node:http'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, resolve, basename, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -73,19 +72,12 @@ function writeReport(extra) {
   }
 }
 
-let ssh, ai
+let ssh
 try {
   if (!existsSync(exe)) throw new Error('Electron executable is missing; run node node_modules/electron/install.js before this smoke test.')
   const sshPort = await port()
   ssh = spawn(process.execPath, ['test/fixtures/testSshServer.mjs', String(sshPort), remote], { env: { ...env, OFS_TEST_SFTP_READ_DELAY_MS: '500' }, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
   await new Promise((r, j) => { const timer = setTimeout(() => j(new Error('SSH fixture startup timeout')), 15000); ssh.stdout.on('data', (d) => { if (d.toString().includes('listening')) { clearTimeout(timer); r() } }) })
-  ai = httpServer((req, res) => {
-    req.resume()
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ choices: [{ message: { content: 'instance-local-ai-result' } }] }))
-  })
-  await new Promise((r) => ai.listen(0, '127.0.0.1', r))
-  const aiPort = ai.address().port
   const [pA, pB, pNormal] = await Promise.all([port(), port(), port()])
   const procA = launch(['--new-instance', `--remote-debugging-port=${pA}`])
   // Both processes start without Chromium state: they must share one protected encryption key.
@@ -102,7 +94,7 @@ try {
 
   for (const client of [a, b]) await client.evaluate(`
     window.__events=[];
-    for(const channel of ['term:data','transfer:progress','transfer:states','ai:delta','ai:completed','app:configChanged']) window.ofs.on(channel,payload=>window.__events.push({channel,payload}));
+    for(const channel of ['term:data','transfer:progress','transfer:states','app:configChanged']) window.ofs.on(channel,payload=>window.__events.push({channel,payload}));
     window.ofs.on('session:prompt', p=>window.ofs.invoke('session:promptReply',{requestId:p.requestId,ok:true,remember:true,answers:['test123']}));
   `)
   const draft = { name: 'multi-smoke-a', groupId: null, host: '127.0.0.1', port: sshPort, username: 'test', auth: { method: 'password', password: 'test123' }, terminal: { charset: 'utf-8', termType: 'xterm' }, options: { keepaliveInterval: 15000, readyTimeout: 10000, legacyAlgorithms: false, autoReconnect: false, monitorEnabled: false, compress: false } }
@@ -136,14 +128,6 @@ try {
   await until(async () => (await b.invoke('transfer:list')).some((t) => t.id === download && t.state === 'done'))
   assert.deepEqual(readFileSync(downloaded), bytes)
   passed('real SFTP upload/download retains identical bytes and independent queues')
-
-  const aiProfile = await a.invoke('ai:profiles:save', { name: 'local-test', model: 'fixture', baseUrl: `http://127.0.0.1:${aiPort}/v1`, token: 'smoke-ai-token' })
-  assert.equal((await b.invoke('ai:profiles:list')).some((p) => p.id === aiProfile.id && p.hasToken), true)
-  await a.invoke('settings:set', { aiAssistantEnabled: true })
-  await b.invoke('ai:chat', { profileId: aiProfile.id, requestId: 'smoke-b-ai', messages: [{ role: 'user', content: 'local test' }], stream: false })
-  await until(() => b.evaluate("return window.__events.some(e=>e.channel==='ai:completed'&&e.payload.requestId==='smoke-b-ai')"))
-  assert.equal(await a.evaluate("return window.__events.some(e=>e.payload.requestId==='smoke-b-ai')"), false)
-  passed('AI token is shared through Vault while response events remain instance-local')
 
   const slowBytes = Buffer.alloc(16 * 1024 * 1024, 81), slowDestination = join(root, 'surviving-download.bin')
   writeFileSync(join(remote, 'slow.bin'), slowBytes)
@@ -191,14 +175,23 @@ try {
   assert.equal((await r.invoke('settings:get')).multiInstanceEnabled, true)
   assert.equal((await r.invoke('app:instanceInfo')).canOpenNewWindow, true)
   assert.equal((await r.invoke('conn:list')).profiles.length, 2)
-  assert.equal((await r.invoke('ai:profiles:list')).some((p) => p.id === aiProfile.id && p.hasToken), true)
-  await r.evaluate("window.__completed=false; window.ofs.on('ai:completed',()=>window.__completed=true)")
-  await r.invoke('ai:chat', { profileId: aiProfile.id, requestId: 'restart-ai', messages: [{ role: 'user', content: 'restart test' }], stream: false })
-  await until(() => r.evaluate('return window.__completed'))
+  await r.evaluate(`
+    window.__events=[];
+    window.__prompted=false;
+    window.ofs.on('term:data', payload=>window.__events.push({channel:'term:data',payload}));
+    window.ofs.on('session:prompt', ()=>{ window.__prompted=true });
+  `)
+  const restartedSession = await r.invoke('session:open', profileA.id)
+  const restartedTerm = await r.invoke('term:open', { sessionId: restartedSession.sessionId, cols: 80, rows: 24 })
+  await r.invoke('term:ready', restartedTerm.termId)
+  await r.invoke('term:exec', { termId: restartedTerm.termId, command: 'echo vault-persisted\r' })
+  await until(() => r.evaluate(`return window.__events.some(e=>e.channel==='term:data'&&new TextDecoder().decode(new Uint8Array(e.payload.data)).includes('vault-persisted'))`))
+  assert.equal(await r.evaluate('return window.__prompted'), false)
+  passed('restart reopens the saved SSH session from Vault without supplying the password again')
   await r.invoke('settings:set', { multiInstanceEnabled: false })
   await r.evaluate('window.close()').catch(() => {})
   await until(() => restarted.exitCode !== null)
-  passed('full restart decrypts shared connection data and the original Vault token')
+  passed('full restart keeps shared connection settings and the saved SSH credential')
   const disabledPort = await port()
   const disabledRestart = launch([`--remote-debugging-port=${disabledPort}`])
   const disabledClient = await connect(disabledPort)
@@ -210,16 +203,16 @@ try {
   const logs = join(data, 'logs')
   for (const file of readdirSync(logs)) {
     const text = readFileSync(join(logs, file), 'utf8')
-    assert(!text.includes('smoke-ai-token')); assert(!text.includes('test123'))
+    assert(!text.includes('test123'))
   }
-  passed('instance logs contain no test passwords or API tokens')
+  passed('instance logs contain no test passwords')
   writeReport({ passed: true, sha256: createHash('sha256').update(bytes).digest('hex'), externalRdp: 'not tested; requires a Windows RDP target', updateInstaller: 'not executed' })
   console.log(`Report: ${join(root, 'report.json')}`)
 } catch (error) {
   const logDirectory = join(data, 'logs')
   const startupLogs = existsSync(logDirectory) ? readdirSync(logDirectory).map((file) => ({ file, tail: readFileSync(join(logDirectory, file), 'utf8').slice(-16384) })) : []
   // Only this fixture's isolated data is inspected. Never publish Chromium Local State or the database.
-  const redact = (value) => JSON.parse(JSON.stringify(value).replaceAll('test123', '[redacted]').replaceAll('smoke-ai-token', '[redacted]'))
+  const redact = (value) => JSON.parse(JSON.stringify(value).replaceAll('test123', '[redacted]'))
   const diagnostics = redact({ processes: childDiagnostics, startupLogs, localStateExists: existsSync(join(data, 'Local State')) })
   writeReport({ passed: false, failure: error instanceof Error ? error.message : 'Smoke failed', diagnostics })
   console.error(JSON.stringify(diagnostics, null, 2))
@@ -228,5 +221,5 @@ try {
 } finally {
   for (const socket of sockets) socket.close()
   for (const child of processes) if (child.exitCode === null) child.kill()
-  ssh?.kill(); ai?.close()
+  ssh?.kill()
 }

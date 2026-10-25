@@ -16,7 +16,7 @@ beforeEach(() => {
   fakeOfs.reset()
   stored = structuredClone(DEFAULT_SETTINGS)
   useSettingsStore.setState({ settings: stored })
-  useUiStore.setState({ settingsOpen: true, settingsSection: 'general' })
+  useUiStore.setState({ settingsOpen: true })
   useSessionStore.setState({ tabs: [] })
   fakeOfs.handle('settings:get', () => stored)
   fakeOfs.handle('settings:set', (patch) => {

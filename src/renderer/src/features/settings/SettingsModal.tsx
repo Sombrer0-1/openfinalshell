@@ -34,7 +34,6 @@ import { DonateSection } from '@/features/donate/DonateSection'
 import { ChangelogModal } from '@/features/onboarding/ChangelogModal'
 import { UpdatePanel } from './UpdatePanel'
 import { TerminalPreview } from './TerminalPreview'
-import { AiSettingsPanel } from '@/features/ai/AiSettingsPanel'
 import { SHORTCUTS } from './shortcuts'
 import styles from './SettingsModal.module.css'
 
@@ -48,7 +47,6 @@ type Section =
   | 'lanSync'
   | 'shortcuts'
   | 'about'
-  | 'ai'
 
 export function SettingsModal(): React.JSX.Element {
   const { t } = useTranslation()
@@ -58,7 +56,6 @@ export function SettingsModal(): React.JSX.Element {
     if (open) void ofs.invoke('settings:get').then(useSettingsStore.getState().receive).catch(() => {})
   }, [open])
   const setOpen = useUiStore((s) => s.setSettingsOpen)
-  const settingsSection = useUiStore((s) => s.settingsSection)
   const settings = useSettingsStore((s) => s.settings)
   const patch = useSettingsStore((s) => s.patch)
   const [section, setSection] = useState<Section>('general')
@@ -71,7 +68,6 @@ export function SettingsModal(): React.JSX.Element {
     }).catch(() => { if (active) setSupportsMultiInstance(false) })
     return () => { active = false }
   }, [open])
-  useEffect(() => { if (settingsSection) setSection(settingsSection as Section) }, [settingsSection])
   const [vaultAvailable, setVaultAvailable] = useState<boolean | null>(null)
   const [versions, setVersions] = useState<Awaited<ReturnType<typeof loadVersions>> | null>(null)
   const [changelogOpen, setChangelogOpen] = useState(false)
@@ -157,7 +153,6 @@ export function SettingsModal(): React.JSX.Element {
             [
               'general',
               'appearance',
-              'ai',
               'terminal',
               'sftp',
               'savedRef',
@@ -170,7 +165,7 @@ export function SettingsModal(): React.JSX.Element {
             key,
             // 代理与私钥那一段的标题住在 savedRef.* 里（整段文案都在那儿），
             // 不为了凑 settings.section_* 的命名再复制一份
-            label: key === 'savedRef' ? t('savedRef.section') : key === 'ai' ? t('aiAssistant.title') : t(`settings.section_${key}`)
+            label: key === 'savedRef' ? t('savedRef.section') : t(`settings.section_${key}`)
           }))}
         />
 
@@ -378,8 +373,6 @@ export function SettingsModal(): React.JSX.Element {
               </Row>
             </>
           )}
-
-          {section === 'ai' && <AiSettingsPanel />}
 
           {section === 'sftp' && (
             <>

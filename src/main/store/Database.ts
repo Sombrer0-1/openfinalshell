@@ -65,18 +65,6 @@ CREATE TABLE IF NOT EXISTS secrets (
   cipher BLOB NOT NULL
 );
 
--- AI provider metadata. API tokens remain in secrets and are referenced only in main.
-CREATE TABLE IF NOT EXISTS ai_profiles (
-  id         TEXT PRIMARY KEY,
-  name       TEXT NOT NULL,
-  base_url   TEXT NOT NULL,
-  model      TEXT NOT NULL,
-  enabled    INTEGER NOT NULL DEFAULT 1,
-  secret_ref TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
 -- key = "host:port:keyType"，同主机不同算法算不同记录，避免误报指纹变更。
 -- at-rest 加密开启后 key 存决定论 token（HMAC），host_enc 存加密后的 "host:port:keyType" 供 UI 还原。
 CREATE TABLE IF NOT EXISTS known_hosts (
@@ -158,7 +146,7 @@ export function database(): DatabaseSync {
   try {
     conn.exec(SCHEMA)
     ensureColumns(conn)
-    const tables = { profiles: 'connections', conn_groups: 'connections', proxies: 'references', private_keys: 'references', ai_profiles: 'ai', documents: 'settings', snippets: 'snippets', snippet_groups: 'snippets', forwards: 'forwards' }
+    const tables = { profiles: 'connections', conn_groups: 'connections', proxies: 'references', private_keys: 'references', documents: 'settings', snippets: 'snippets', snippet_groups: 'snippets', forwards: 'forwards' }
     for (const [table, entity] of Object.entries(tables)) {
       conn.prepare('INSERT OR IGNORE INTO config_revisions(entity, revision) VALUES (?, 0)').run(entity)
       for (const op of ['INSERT', 'UPDATE', 'DELETE']) {

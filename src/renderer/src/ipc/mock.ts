@@ -505,27 +505,6 @@ export function createMockOfs(): OfsApi {
   }
 
   const handlers: Record<string, (...args: never[]) => unknown> = {
-    'ai:profiles:list': () => [
-      { id: 'mock-openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', enabled: true, hasToken: true, createdAt: 1, updatedAt: 1 }
-    ],
-    'ai:profiles:save': (draft: never) => ({
-      id: (draft as { id?: string }).id ?? 'mock-openai', name: (draft as { name: string }).name,
-      baseUrl: (draft as { baseUrl: string }).baseUrl, model: (draft as { model: string }).model,
-      enabled: true, hasToken: Boolean((draft as { token?: string }).token), createdAt: 1, updatedAt: Date.now()
-    }),
-    'ai:profiles:delete': () => undefined,
-    'ai:connectionTest': () => ({ ok: true, model: 'gpt-4o-mini', latencyMs: 0 }),
-    'ai:models:discover': () => [
-      { id: 'gpt-4o-mini', name: 'gpt-4o-mini', ownedBy: 'openai', contextWindow: 128000, input: { text: true, image: 'yes' as const } },
-      { id: 'gpt-3.5-turbo', name: 'gpt-3.5-turbo', ownedBy: 'openai', contextWindow: 16384, input: { text: true, image: 'no' as const } }
-    ],
-    'ai:model:capabilityTest': (request: never) => ({ model: (request as { model: string }).model, image: 'unknown', outcome: 'inconclusive', message: i18n.t('aiCapabilities.mockMessage'), httpStatus: 0 }),
-    'ai:chat': (request: never) => {
-      const p = request as { requestId: string }
-      setTimeout(() => { emit('ai:delta', { requestId: p.requestId, text: '这是浏览器调试模式的 AI 模拟回答。' }); emit('ai:completed', { requestId: p.requestId }) }, 80)
-      return undefined
-    },
-    'ai:cancel': () => undefined,
     'app:instanceInfo': () => ({ instanceId: 'browser-preview', pid: 0, multiInstanceSupported: true, canOpenNewWindow: settings.multiInstanceEnabled }),
     'app:newWindow': () => { throw new Error('浏览器预览无法启动桌面窗口。') },
     'settings:get': () => settings,
@@ -552,7 +531,7 @@ export function createMockOfs(): OfsApi {
     },
     'app:getVersions': () => ({ app: '0.1.0-mock', electron: 'browser', node: '-', chrome: '-' }),
     // 浏览器 mock 里默认当"更新到当前版本"，方便直接预览更新弹窗
-    'app:getStartupNotice': () => ({ kind: 'update', fromVersion: '0.11.0', toVersion: '0.12.0' }),
+    'app:getStartupNotice': () => ({ kind: 'update', fromVersion: '0.0.0', toVersion: '0.30.31' }),
     // 浏览器 mock 没有主进程语言包，任何语言都回 en-US（UI 调试足够）
     'i18n:bundle': () => enUSLocale as unknown as Record<string, unknown>,
     // 浏览器里没有原生对话框，返回假路径让传输流程可走通

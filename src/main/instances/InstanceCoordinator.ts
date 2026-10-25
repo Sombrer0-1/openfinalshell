@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { databaseFile, metaGet, metaSet, prepare, tx } from '../store/Database'
 import type { UpdateActivity, UpdateInstallResult, UpdateState } from '@shared/types'
 
-export const configEntity = z.enum(['connections', 'references', 'ai', 'settings', 'snippets', 'forwards'])
+export const configEntity = z.enum(['connections', 'references', 'settings', 'snippets', 'forwards'])
 export type ConfigEntity = z.infer<typeof configEntity>
 export type ConfigChange = { entity: ConfigEntity; revision: number; sourceInstanceId: string }
 const requestSchema = z.discriminatedUnion('kind', [

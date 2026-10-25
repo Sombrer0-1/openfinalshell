@@ -19,84 +19,6 @@ export type TaskId = string // 一个传输任务
 export type ForwardId = string // 一条转发规则
 export type SnippetId = string
 export type SecretRef = string // Vault 凭据引用，renderer 永远拿不到明文
-export type AiProfileId = string
-
-/** AI provider configuration; the token is write-only and never part of this type. */
-export interface AiProviderProfile {
-  id: AiProfileId
-  name: string
-  baseUrl: string
-  model: string
-  enabled: boolean
-  hasToken: boolean
-  createdAt: number
-  updatedAt: number
-}
-
-/** Renderer draft. token is accepted only on writes and is never returned. */
-export interface AiProviderProfileDraft {
-  expectedUpdatedAt?: number
-  id?: AiProfileId
-  name: string
-  baseUrl: string
-  model: string
-  enabled?: boolean
-  token?: string
-  clearToken?: boolean
-}
-
-export type AiImageCapability = 'yes' | 'no' | 'unknown'
-
-export interface AiConnectionTestResult {
-  ok: true
-  model: string
-  /** API round trip through the complete response body, excluding local credential reads. */
-  latencyMs: number
-}
-
-/** Token is write-only. Draft URL and credential are authoritative for explicit tests. */
-export interface AiModelEndpointDraft {
-  profileId?: string
-  baseUrl?: string
-  token?: string
-}
-
-export interface AiImageCapabilityTestResult {
-  model: string
-  image: AiImageCapability
-  /** Accepted tests confirm request compatibility, not image recognition accuracy. */
-  outcome: 'accepted' | 'unsupported' | 'inconclusive'
-  message: string
-  httpStatus: number
-}
-
-/** Model metadata returned by an OpenAI-compatible GET /models endpoint. */
-export interface AiModelInfo {
-  id: string
-  name: string
-  ownedBy?: string
-  contextWindow?: number
-  maxOutputTokens?: number
-  input: { text: boolean; image: AiImageCapability }
-  imageSource?: 'metadata' | 'probe'
-}
-
-export type AiMessageContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
-
-export interface AiChatMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string | AiMessageContentPart[]
-}
-
-export interface AiChatRequest {
-  requestId: string
-  profileId: AiProfileId
-  messages: AiChatMessage[]
-  /** Whether the provider should return SSE deltas. Defaults to true for compatibility. */
-  stream?: boolean
-}
 
 // ---------- 连接配置 ----------
 export type AuthMethod = 'password' | 'privateKey' | 'agent'
@@ -1016,8 +938,6 @@ export interface AppSettings {
    * 装更新必然要退出应用，那一下不能由软件替用户决定。
    */
   autoCheckUpdate: boolean
-  /** AI assistant is opt-in; enabling it permits explicit model requests. */
-  aiAssistantEnabled: boolean
   terminal: {
     fontFamily: string
     fontSize: number
