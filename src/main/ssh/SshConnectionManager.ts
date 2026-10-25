@@ -10,6 +10,7 @@ import { clearProbeCache } from '../sftp/packTransfer'
 import { monitorManager } from '../monitor/MonitorManager'
 import { portTrafficManager } from '../monitor/PortTrafficManager'
 import { processPanelManager } from '../monitor/ProcessPanelManager'
+import { tmuxManager } from '../monitor/TmuxManager'
 import { forwardManager } from '../forward/ForwardManager'
 import { autoStartRules } from '../store/forwards'
 import { t } from '../services/i18n'
@@ -57,6 +58,9 @@ class SshConnectionManager {
       })
       void processPanelManager.reattach(conn.sessionId).catch((err: Error) => {
         log.warn(`restore process panel failed: ${err.message}`)
+      })
+      void tmuxManager.reattach(conn.sessionId).catch((err: Error) => {
+        log.warn(`restore tmux panel failed: ${err.message}`)
       })
       const pending = this.pendingForwards.get(conn.sessionId)
       if (!pending || pending.length === 0) return
@@ -111,6 +115,18 @@ class SshConnectionManager {
     return { termId: shell.termId }
   }
 
+  /** tmux 附着通道：注册进 terms，term:input/resize/close/ready 走同一套管道 */
+  async openTmuxAttach(
+    sessionId: SessionId,
+    targetId: string,
+    cols: number,
+    rows: number
+  ): Promise<{ termId: TermId }> {
+    const shell = await this.get(sessionId).openTmuxAttach(targetId, cols, rows)
+    this.terms.set(shell.termId, shell)
+    return { termId: shell.termId }
+  }
+
   async reconnect(sessionId: SessionId): Promise<void> {
     await this.get(sessionId).reconnect()
   }
@@ -140,6 +156,7 @@ class SshConnectionManager {
     monitorManager.stop(sessionId)
     portTrafficManager.stop(sessionId)
     processPanelManager.stop(sessionId)
+    tmuxManager.stop(sessionId)
     forwardManager.stopForSession(sessionId)
     this.pendingForwards.delete(sessionId)
     for (const termId of conn.shells.keys()) this.terms.delete(termId)

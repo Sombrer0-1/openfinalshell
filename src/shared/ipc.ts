@@ -69,6 +69,8 @@ import type {
   TaskId,
   TrustedHostkey,
   TermId,
+  TmuxPanelState,
+  TmuxSessionInfo,
   ConflictProbeResult,
   TransferEnqueueItem,
   TransferTask
@@ -326,6 +328,25 @@ export interface InvokeMap {
   'processPanel:detail': { args: [{ sessionId: SessionId; pid: number }]; result: ProcessDetail | null }
   'processPanel:kill': { args: [{ sessionId: SessionId; pid: number; force?: boolean }]; result: void }
 
+  // --- Tmux 会话管理（面板按需采集；附着通道复用 term:input/resize/ready/close 管道） ---
+  'tmux:start': { args: [SessionId]; result: void }
+  'tmux:stop': { args: [SessionId]; result: void }
+  /** 新建会话；成功返回新会话的 session_id（`$N`）。同名冲突走异常（duplicateSession 文案） */
+  'tmux:new': { args: [{ sessionId: SessionId; name: string }]; result: { id: string } }
+  /** 关闭（kill）会话。targetId 必须是 session_id（`$N`），名称只作显示 */
+  'tmux:kill': { args: [{ sessionId: SessionId; targetId: string }]; result: void }
+  /** 开启 / 关闭全局鼠标支持（面板提示条的一键开启） */
+  'tmux:setMouse': { args: [{ sessionId: SessionId; enabled: boolean }]; result: void }
+  /**
+   * 附着：先 has-session 检查（失败抛 sessionGone），再开 exec+pty 通道并包进
+   * ShellSession。返回 termId 后渲染层必须像 term:open 一样调 `term:ready`，
+   * 否则输出一直缓冲、终端空白。
+   */
+  'tmux:attach': {
+    args: [{ sessionId: SessionId; targetId: string; cols: number; rows: number }]
+    result: { termId: TermId }
+  }
+
   // --- 端口转发 ---
   'forward:list': { args: [ProfileId | null]; result: Array<ForwardRule & { runtime?: ForwardRuntime }> }
   'forward:save': { args: [ForwardRule]; result: void }
@@ -453,6 +474,14 @@ export interface EventMap {
   'portTraffic:state': { sessionId: SessionId; state: PortTrafficState; error?: string }
   'processPanel:data': { sessionId: SessionId; snapshot: ProcessSnapshot }
   'processPanel:state': { sessionId: SessionId; state: ProcessPanelState; error?: string }
+  'tmux:sessions': {
+    sessionId: SessionId
+    ts: number
+    sessions: TmuxSessionInfo[]
+    /** 全局 mouse 选项；无 server（合法空态）时缺失 */
+    mouseOn?: boolean
+  }
+  'tmux:state': { sessionId: SessionId; state: TmuxPanelState; error?: string }
   'forward:state': { runtime: ForwardRuntime }
   'settings:changed': AppSettings
   /** 更新器状态（checking / available / downloading 进度 / downloaded / error） */
@@ -488,6 +517,7 @@ export const CHANNEL_PREFIXES = [
   'monitor:',
   'portTraffic:',
   'processPanel:',
+  'tmux:',
   'forward:',
   'history:',
   'proxy:',
@@ -606,6 +636,12 @@ export const INVOKE_CHANNELS = channelSet<InvokeChannel>({
   'processPanel:stop': true,
   'processPanel:detail': true,
   'processPanel:kill': true,
+  'tmux:start': true,
+  'tmux:stop': true,
+  'tmux:new': true,
+  'tmux:kill': true,
+  'tmux:setMouse': true,
+  'tmux:attach': true,
   'forward:list': true,
   'forward:save': true,
   'forward:delete': true,
@@ -666,6 +702,8 @@ export const EVENT_CHANNELS = channelSet<EventChannel>({
   'portTraffic:state': true,
   'processPanel:data': true,
   'processPanel:state': true,
+  'tmux:sessions': true,
+  'tmux:state': true,
   'forward:state': true,
   'settings:changed': true,
   'update:state': true,

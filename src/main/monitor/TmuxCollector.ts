@@ -1,0 +1,276 @@
+import type { ClientChannel } from 'ssh2'
+import type { SessionId, TmuxPanelState, TmuxSessionInfo } from '@shared/types'
+import { TMUX_FRAME_TIMEOUT_MS, TMUX_MAX_FRAME_BYTES, TMUX_POLL_INTERVAL_MS } from '@shared/constants'
+import { t } from '../services/i18n'
+import { scopedLogger } from '../utils/logger'
+import { buildTmuxListFrame, buildTmuxProbeFrame } from './tmuxScript'
+import { splitSections } from './script'
+
+const log = scopedLogger('tmux')
+const FRAME_RE = /@@OFS:BEGIN:(\d+)@@\r?\n([\s\S]*?)@@OFS:END:\1@@\r?\n?/
+const MAX_CONSECUTIVE_FAILURES = 3
+/** tmux 内部会话 id 的形状（`$0`、`$1`…）；不匹配的行直接丢弃。 */
+export const TMUX_SESSION_ID_RE = /^\$\d+$/
+
+export interface TmuxSnapshot {
+  ts: number
+  sessions: TmuxSessionInfo[]
+  /** 全局 mouse 选项值；server 未运行（合法空态）时无值。 */
+  mouseOn?: boolean
+}
+
+export interface TmuxCallbacks {
+  onSnapshot: (snapshot: TmuxSnapshot) => void
+  onState: (state: TmuxPanelState, error?: string) => void
+}
+
+/**
+ * 解析 `tmux list-sessions -F 'id\twindows\tattached\tcreated\tname'` 的正文。
+ * 远端输出不可信：id 不合 `$N` 形状、数值列非法的行丢弃；名称吸收第 4 个
+ * tab 之后的所有内容（tmux 对名称内的 \t / \n 做转义，这里按原始 tab 切前四列）。
+ */
+export function parseTmuxSessions(text: string): TmuxSessionInfo[] {
+  const out: TmuxSessionInfo[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
+    if (!line) continue
+    const parts = line.split('\t')
+    if (parts.length < 5) continue
+    const [id, windows, attached, created] = parts
+    if (!TMUX_SESSION_ID_RE.test(id)) continue
+    const win = Number(windows)
+    const att = Number(attached)
+    const cre = Number(created)
+    if (!Number.isInteger(win) || win < 1) continue
+    if (!Number.isInteger(att) || att < 0) continue
+    if (!Number.isInteger(cre) || cre < 0) continue
+    out.push({
+      id,
+      name: parts.slice(4).join('\t').slice(0, 256),
+      windows: win,
+      attached: att,
+      created: cre
+    })
+  }
+  // 按名称稳定排序（刷新不跳行）；同名时按 id 定序，保证全序确定。
+  return out.sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  )
+}
+
+/** 解析 MOUSE 段：`on` / `off`；空正文（无 server）返回 undefined。 */
+export function parseTmuxMouse(text: string): boolean | undefined {
+  const v = text.trim()
+  if (v === 'on') return true
+  if (v === 'off') return false
+  return undefined
+}
+
+/**
+ * 打开 tmux 面板标签后才运行的独立采集器（与 ProcessPanelCollector 同构）。
+ * 首帧探测 tmux 是否存在（no → unsupported），之后每 TMUX_POLL_INTERVAL_MS 一帧列表；
+ * ERROR 段出现即 failed（透出前三行错误），no-server 是合法空态（空列表）。
+ */
+export class TmuxCollector {
+  private channel: ClientChannel | null = null
+  private buffer = ''
+  private seq = 0
+  private timer: NodeJS.Timeout | null = null
+  private frameTimer: NodeJS.Timeout | null = null
+  private pending: { seq: number; resolve: (body: string | null) => void } | null = null
+  private failures = 0
+  private stopped = false
+  private probed = false
+  state: TmuxPanelState = 'stopped'
+
+  constructor(
+    readonly sessionId: SessionId,
+    private readonly openChannel: () => Promise<ClientChannel>,
+    private readonly cb: TmuxCallbacks
+  ) {}
+
+  async start(): Promise<void> {
+    this.stopped = false
+    this.pause()
+    await this.open()
+  }
+
+  /** 面板操作（新建 / 关闭 / 开鼠标 / 附着）之后由 TmuxManager 立即补一帧。 */
+  refreshNow(): void {
+    this.tick()
+  }
+
+  async reattach(): Promise<void> {
+    if (this.stopped || this.state === 'unsupported') return
+    this.pause()
+    this.channel?.close()
+    this.channel = null
+    this.pending?.resolve(null)
+    this.pending = null
+    await this.open()
+  }
+
+  stop(): void {
+    this.stopped = true
+    this.pause()
+    this.channel?.close()
+    this.channel = null
+    this.pending?.resolve(null)
+    this.pending = null
+    this.setState('stopped')
+  }
+
+  private async open(): Promise<void> {
+    this.setState('collecting')
+    const channel = await this.openChannel()
+    // open() 在途守卫：等待通道期间被 stop()，就地关掉，不再注册
+    if (this.stopped) {
+      channel.close()
+      return
+    }
+    this.channel = channel
+    channel.on('data', (chunk: Buffer) => this.onData(chunk))
+    channel.stderr.on('data', () => {
+      /* tmux 的权限 / socket 问题按 ERROR 段和帧超时处理 */
+    })
+    channel.on('close', () => this.onChannelClosed(channel))
+    this.timer = setInterval(() => this.tick(), TMUX_POLL_INTERVAL_MS)
+    this.tick()
+  }
+
+  private pause(): void {
+    if (this.timer) clearInterval(this.timer)
+    this.timer = null
+    if (this.frameTimer) clearTimeout(this.frameTimer)
+    this.frameTimer = null
+  }
+
+  private setState(state: TmuxPanelState, error?: string): void {
+    if (this.state === state && error === undefined) return
+    this.state = state
+    this.cb.onState(state, error)
+  }
+
+  private tick(): void {
+    if (this.stopped || !this.channel || this.pending) return
+    this.seq += 1
+    const seq = this.seq
+    const script = this.probed ? buildTmuxListFrame(seq) : buildTmuxProbeFrame(seq)
+    void this.request(script, seq).then((body) => {
+      if (body === null) {
+        this.onFailure(t('err.net.collectTimeout'))
+        return
+      }
+      const sections = splitSections(body)
+      if (!this.probed) {
+        if ((sections.get('HASTMUX') ?? '').includes('yes')) {
+          this.probed = true
+          // 探测通过：不等下一个 2s tick，立即补首帧列表，面板尽快有数据
+          this.tick()
+        } else {
+          this.pause()
+          this.setState('unsupported')
+        }
+        return
+      }
+      // ERROR 段 = 采集本身出错（权限 / socket / 配置损坏），透出前三行、面板置 failed。
+      // 与 no-server 不同：no-server 走空正文，面板显示空列表加新建入口。
+      if (sections.has('ERROR')) {
+        this.pause()
+        this.setState('failed', (sections.get('ERROR') ?? '').trim())
+        return
+      }
+      try {
+        const sessions = parseTmuxSessions(sections.get('SESSIONS') ?? '')
+        const mouseOn = parseTmuxMouse(sections.get('MOUSE') ?? '')
+        this.cb.onSnapshot({ ts: Date.now(), sessions, mouseOn })
+        this.failures = 0
+        if (this.state !== 'running') this.setState('running')
+      } catch (err) {
+        this.onFailure(err instanceof Error ? err.message : String(err))
+      }
+    })
+  }
+
+  private request(script: string, seq: number): Promise<string | null> {
+    return new Promise((resolve) => {
+      if (!this.channel) return resolve(null)
+      this.pending = { seq, resolve }
+      this.frameTimer = setTimeout(() => {
+        if (this.pending?.seq !== seq) return
+        this.pending = null
+        this.frameTimer = null
+        resolve(null)
+      }, TMUX_FRAME_TIMEOUT_MS)
+      this.channel.write(script)
+    })
+  }
+
+  private onData(chunk: Buffer): void {
+    this.buffer += chunk.toString('utf8')
+    if (Buffer.byteLength(this.buffer, 'utf8') > TMUX_MAX_FRAME_BYTES) {
+      this.buffer = ''
+      const pending = this.pending
+      if (pending) {
+        this.pending = null
+        if (this.frameTimer) clearTimeout(this.frameTimer)
+        this.frameTimer = null
+        pending.resolve(null)
+      }
+      this.onFailure('tmux list response exceeded the safety limit')
+      return
+    }
+
+    let match: RegExpExecArray | null
+    while ((match = FRAME_RE.exec(this.buffer))) {
+      this.buffer = this.buffer.slice(match.index + match[0].length)
+      const seq = Number(match[1])
+      if (!this.pending || this.pending.seq !== seq) continue
+      if (this.frameTimer) clearTimeout(this.frameTimer)
+      this.frameTimer = null
+      const { resolve } = this.pending
+      this.pending = null
+      resolve(match[2])
+      return
+    }
+  }
+
+  private onFailure(reason: string): void {
+    if (this.stopped) return
+    this.failures += 1
+    log.debug(`session ${this.sessionId}: tmux panel failed (${this.failures}) ${reason}`)
+    if (this.failures >= MAX_CONSECUTIVE_FAILURES) {
+      this.pause()
+      this.setState('failed', reason)
+    }
+  }
+
+  private onChannelClosed(channel: ClientChannel): void {
+    if (this.channel !== channel) return
+    this.channel = null
+    this.pause()
+    // 在途帧永远等不到应答了，就地收尾 —— 否则 pending 一直占着，tick() 全被挡掉
+    if (this.pending) {
+      const { resolve } = this.pending
+      this.pending = null
+      resolve(null)
+    }
+    if (this.stopped) return
+    // 通道被杀（如用户附着后误杀了常驻 sh）：5s 后重建。
+    // 整条 SSH 连接断了的情况由 TmuxManager.reattach 在重连成功后驱动。
+    log.debug(`session ${this.sessionId}: tmux panel channel closed, retrying in 5s`)
+    setTimeout(() => {
+      if (this.stopped || this.channel) return
+      void this.restart()
+    }, 5000)
+  }
+
+  private async restart(): Promise<void> {
+    try {
+      this.buffer = ''
+      await this.open()
+    } catch (err) {
+      this.onFailure(err instanceof Error ? err.message : String(err))
+    }
+  }
+}

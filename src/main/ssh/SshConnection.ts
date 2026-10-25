@@ -14,6 +14,7 @@ import { channelOpenError, friendlySshError } from './errors'
 import { checkHostkey, fingerprintSha256, parseKeyType, trustHostkey } from './hostkeys'
 import { promptBroker } from './PromptBroker'
 import { ShellSession } from './ShellSession'
+import { buildTmuxAttachCommand } from '../monitor/tmuxScript'
 import { vault } from '../store/Vault'
 import { t } from '../services/i18n'
 import { scopedLogger } from '../utils/logger'
@@ -311,6 +312,37 @@ export class SshConnection extends EventEmitter {
     if (this.profile.terminal.startupCommand) {
       shell.write(`${this.profile.terminal.startupCommand}\n`)
     }
+    return shell
+  }
+
+  /**
+   * tmux 附着通道：对 openShell 的复刻，仅通道来源不同（exec `tmux attach` 而非 shell）。
+   *
+   * - **pty 必须传对象**：传 true 时 ssh2 用默认值（TERM=vt100、80×24），tmux 会按
+   *   80×24 协商窗口并可能因 vt100 降级 terminfo。
+   * - 跳过 startupCommand：附着标签直接进 tmux 画面，中间不经过 shell。
+   * - 与 openShell 同款 ShellSession 包装并注册进 shells —— 于是 term:input、
+   *   term:resize、term:close、流控、outputReady 门控与连接关闭清理全部复用，
+   *   不新造通道类。
+   */
+  async openTmuxAttach(targetId: string, cols: number, rows: number): Promise<ShellSession> {
+    const client = this.client
+    if (!client || this.state !== 'ready') throw new Error(t('err.ssh.sessionNotReady'))
+    const termId = randomUUID()
+    const channel = await new Promise<ClientChannel>((resolve, reject) => {
+      client.exec(
+        buildTmuxAttachCommand(targetId),
+        { pty: { term: this.profile.terminal.termType || 'xterm-256color', cols, rows } },
+        (err, stream) => (err ? reject(new Error(channelOpenError(err))) : resolve(stream))
+      )
+    })
+    const shell = new ShellSession(termId, channel, this.profile.terminal.charset || 'utf-8', (reason) => {
+      // tmux 客户端退出（prefix+d detach 或会话被 kill）→ 通道关闭；连接断开走 onClientClosed
+      if (this.shells.delete(termId)) {
+        this.emit('shell-exit', { termId, reason } as ShellExitInfo)
+      }
+    })
+    this.shells.set(termId, shell)
     return shell
   }
 

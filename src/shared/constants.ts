@@ -283,3 +283,18 @@ export const PROCESS_PANEL_MAX_FRAME_BYTES = 2 * 1024 * 1024
 export const PROCESS_PANEL_FRAME_TIMEOUT_MS = 8000
 /** 列表最多保留的进程数（按 CPU 排序后截断）。 */
 export const PROCESS_PANEL_MAX_PROCS = 4000
+
+/**
+ * Tmux 面板独立通道采样，不与监控 / 端口流量 / 进程面板抢同一帧。
+ * 列表探针轮询（开发边界：不做 tmux -C 控制模式）。
+ */
+export const TMUX_POLL_INTERVAL_MS = 2000
+/**
+ * 新建会话的名称长度上限。IPC 的 zod 与 main 侧的守卫共用这一份 ——
+ * 两处各写一个数迟早会漂（COMMAND_HISTORY_MAX_CHARS 同一条理由）。
+ */
+export const TMUX_SESSION_NAME_MAX = 64
+/** 单帧上限：会话列表本身很小，这是兜异常值的安全阀，不是常规路径的约束。 */
+export const TMUX_MAX_FRAME_BYTES = 256 * 1024
+/** 帧超时：写入批次后超过该时长未见 END 即丢帧（与进程面板同档）。 */
+export const TMUX_FRAME_TIMEOUT_MS = 8000

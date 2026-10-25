@@ -885,6 +885,34 @@ export interface ProcessDetail {
   env: string
 }
 
+// ---------- Tmux 会话管理 ----------
+/**
+ * tmux 面板列表里的一行。
+ *
+ * `id` 是 tmux 内部会话 id（`$0`、`$1`…）—— **所有操作的寻址键**：
+ * 名称可被 rename、可含空格、可与历史会话重名，只有 session_id 在 server 存续期内
+ * 唯一。名称只作显示与排序。
+ */
+export interface TmuxSessionInfo {
+  /** 形如 `$0`；主进程侧的 zod 与守卫都按 `^\$\d+$` 认它。 */
+  id: string
+  /** 显示名（用户命名或 tmux 自动编号）。 */
+  name: string
+  /** 窗口数。 */
+  windows: number
+  /** 附着的客户端数（>0 时列表行显示徽标，kill 确认要警告）。 */
+  attached: number
+  /** 创建时间（epoch **秒**，tmux 原样输出；渲染层负责换算显示）。 */
+  created: number
+}
+
+/**
+ * Tmux 面板状态机。
+ * `collecting` 是 start 之后、首帧列表回来之前的过渡态（对应面板的「连接中」）；
+ * 其余与 ProcessPanelState 同义。
+ */
+export type TmuxPanelState = 'collecting' | 'running' | 'failed' | 'unsupported' | 'stopped'
+
 
 // ---------- 端口转发 ----------
 export type ForwardType = 'local' | 'remote' | 'dynamic'
