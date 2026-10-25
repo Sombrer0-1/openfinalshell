@@ -176,6 +176,7 @@
     "empty": "No processes readable",
     "unsupported": "This server does not support process listing (needs Linux ps or /proc)",
     "failed": "Process collection failed",
+    "stopped": "Collection stopped",
     "terminate": "Terminate process",
     "forceKill": "Force kill",
     "copyPid": "Copy PID",
