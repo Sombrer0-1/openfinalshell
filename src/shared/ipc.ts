@@ -41,6 +41,9 @@ import type {
   MonitorStaticInfo,
   PortTrafficSnapshot,
   PortTrafficState,
+  ProcessDetail,
+  ProcessSnapshot,
+  ProcessPanelState,
   RdpDisplaySize,
   RdpErrorCode,
   RdpFrame,
@@ -317,6 +320,12 @@ export interface InvokeMap {
   'portTraffic:start': { args: [SessionId]; result: void }
   'portTraffic:stop': { args: [SessionId]; result: void }
 
+  // --- 进程面板（仅在打开进程标签时按需采集；杀进程 / 详情走同一会话） ---
+  'processPanel:start': { args: [SessionId]; result: void }
+  'processPanel:stop': { args: [SessionId]; result: void }
+  'processPanel:detail': { args: [{ sessionId: SessionId; pid: number }]; result: ProcessDetail | null }
+  'processPanel:kill': { args: [{ sessionId: SessionId; pid: number; force?: boolean }]; result: void }
+
   // --- 端口转发 ---
   'forward:list': { args: [ProfileId | null]; result: Array<ForwardRule & { runtime?: ForwardRuntime }> }
   'forward:save': { args: [ForwardRule]; result: void }
@@ -442,6 +451,8 @@ export interface EventMap {
   'monitor:state': { sessionId: SessionId; state: MonitorState; error?: string }
   'portTraffic:data': { sessionId: SessionId; snapshot: PortTrafficSnapshot }
   'portTraffic:state': { sessionId: SessionId; state: PortTrafficState; error?: string }
+  'processPanel:data': { sessionId: SessionId; snapshot: ProcessSnapshot }
+  'processPanel:state': { sessionId: SessionId; state: ProcessPanelState; error?: string }
   'forward:state': { runtime: ForwardRuntime }
   'settings:changed': AppSettings
   /** 更新器状态（checking / available / downloading 进度 / downloaded / error） */
@@ -476,6 +487,7 @@ export const CHANNEL_PREFIXES = [
   'transfer:',
   'monitor:',
   'portTraffic:',
+  'processPanel:',
   'forward:',
   'history:',
   'proxy:',
@@ -590,6 +602,10 @@ export const INVOKE_CHANNELS = channelSet<InvokeChannel>({
   'monitor:setInterval': true,
   'portTraffic:start': true,
   'portTraffic:stop': true,
+  'processPanel:start': true,
+  'processPanel:stop': true,
+  'processPanel:detail': true,
+  'processPanel:kill': true,
   'forward:list': true,
   'forward:save': true,
   'forward:delete': true,
@@ -648,6 +664,8 @@ export const EVENT_CHANNELS = channelSet<EventChannel>({
   'monitor:state': true,
   'portTraffic:data': true,
   'portTraffic:state': true,
+  'processPanel:data': true,
+  'processPanel:state': true,
   'forward:state': true,
   'settings:changed': true,
   'update:state': true,

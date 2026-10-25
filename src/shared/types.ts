@@ -850,6 +850,42 @@ export interface PortTrafficSnapshot {
 
 export type PortTrafficState = 'running' | 'failed' | 'unsupported' | 'stopped'
 
+/** 进程面板列表里的一行。location 常空，选中后再按需拉取详情。 */
+export interface ProcessEntry {
+  pid: number
+  user: string
+  /** RSS，字节；用于排序与展示。 */
+  memBytes: number
+  /** CPU 占用百分比（ps 给出的累计/瞬时估值）。 */
+  cpu: number
+  /** 短名（comm / 命令首段）。 */
+  name: string
+  /** 完整命令行；不可读时可能与 name 相同。 */
+  cmdline: string
+  /** 可执行文件路径；列表帧通常为空，详情帧再补。 */
+  location: string
+}
+
+/** 进程面板的一次完整快照。 */
+export interface ProcessSnapshot {
+  ts: number
+  processes: ProcessEntry[]
+}
+
+export type ProcessPanelState = 'running' | 'failed' | 'unsupported' | 'stopped'
+
+/** 选中进程后按需拉取的详情（cwd / env / exe）。 */
+export interface ProcessDetail {
+  pid: number
+  name: string
+  location: string
+  cwd: string
+  cmdline: string
+  /** 环境变量，每行 `KEY=VALUE`；不可读时为空串。 */
+  env: string
+}
+
+
 // ---------- 端口转发 ----------
 export type ForwardType = 'local' | 'remote' | 'dynamic'
 export type ForwardState = 'stopped' | 'active' | 'error'

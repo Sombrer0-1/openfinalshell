@@ -10,6 +10,8 @@ import type {
   ForwardRuntime,
   ProfileDraft,
   PortTrafficSnapshot,
+  ProcessSnapshot,
+  ProcessDetail,
   SavedPrivateKey,
   SavedPrivateKeyDraft,
   SavedProxy,
@@ -238,6 +240,29 @@ export function createMockOfs(): OfsApi {
   // --- 假监控：周期推送带随机波动的快照 ---
   const monitorTimers = new Map<string, ReturnType<typeof setInterval>>()
   const portTrafficTimers = new Map<string, ReturnType<typeof setInterval>>()
+  const processPanelTimers = new Map<string, ReturnType<typeof setInterval>>()
+
+  function startMockProcessPanel(sessionId: string): void {
+    if (processPanelTimers.has(sessionId)) return
+    let tick = 0
+    const push = (): void => {
+      tick += 1
+      const snapshot: ProcessSnapshot = {
+        ts: Date.now(),
+        processes: [
+          { pid: 1, user: 'root', memBytes: 12_000_000, cpu: 0.1, name: 'systemd', cmdline: '/sbin/init', location: '/sbin/init' },
+          { pid: 420, user: 'root', memBytes: 85_000_000, cpu: 12.4 + (tick % 5), name: 'node', cmdline: 'node server.js', location: '/usr/bin/node' },
+          { pid: 1024, user: 'demo', memBytes: 220_000_000, cpu: 4.2, name: 'java', cmdline: 'java -jar app.jar', location: '/usr/bin/java' },
+          { pid: 2048, user: 'demo', memBytes: 48_000_000, cpu: 1.1, name: 'sshd', cmdline: 'sshd: demo@pts/0', location: '/usr/sbin/sshd' },
+          { pid: 3001, user: 'root', memBytes: 0, cpu: 0, name: 'kworker/0:1', cmdline: '[kworker/0:1]', location: '' }
+        ].sort((a, b) => b.cpu - a.cpu)
+      }
+      emit('processPanel:data', { sessionId, snapshot })
+    }
+    emit('processPanel:state', { sessionId, state: 'running' })
+    push()
+    processPanelTimers.set(sessionId, setInterval(push, 2000))
+  }
 
   function startMockPortTraffic(sessionId: string): void {
     if (portTrafficTimers.has(sessionId)) return
@@ -1027,7 +1052,28 @@ export function createMockOfs(): OfsApi {
       if (timer) clearInterval(timer)
       portTrafficTimers.delete(id)
       emit('portTraffic:state', { sessionId: id, state: 'stopped' })
-    }
+    },
+    'processPanel:start': (sessionId: never) => startMockProcessPanel(sessionId as unknown as string),
+    'processPanel:stop': (sessionId: never) => {
+      const id = sessionId as unknown as string
+      const timer = processPanelTimers.get(id)
+      if (timer) clearInterval(timer)
+      processPanelTimers.delete(id)
+      emit('processPanel:state', { sessionId: id, state: 'stopped' })
+    },
+    'processPanel:detail': ({ sessionId, pid }: never) => {
+      const req = { sessionId, pid } as unknown as { sessionId: string; pid: number }
+      const detail: ProcessDetail = {
+        pid: req.pid,
+        name: req.pid === 420 ? 'node' : `proc-${req.pid}`,
+        location: req.pid === 420 ? '/usr/bin/node' : '',
+        cwd: '/home/demo',
+        cmdline: req.pid === 420 ? 'node server.js' : `proc-${req.pid}`,
+        env: 'HOME=/home/demo\nPATH=/usr/bin:/bin\nTERM=xterm-256color'
+      }
+      return detail
+    },
+    'processPanel:kill': () => undefined
   }
 
   const handleInput = (termId: string, data: string): void => {
