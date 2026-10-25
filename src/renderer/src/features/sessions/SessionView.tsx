@@ -4,6 +4,7 @@ import { TerminalPane } from '@/features/terminal/TerminalPane'
 import { SftpPane } from '@/features/sftp/SftpPane'
 import { PortTrafficTab } from '@/features/portTraffic/PortTrafficTab'
 import { ProcessPanelTab } from '@/features/processPanel/ProcessPanelTab'
+import { TmuxPanelTab } from '@/features/tmux/TmuxPanelTab'
 import { RdpPane } from './RdpPane'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import type { SessionTab } from '@/stores/useSessionStore'
@@ -35,8 +36,13 @@ export function SessionViewHost({ tabs, activeTabId, uiMode }: Props): React.JSX
                 <PortTrafficTab tab={tab} />
               ) : tab.kind === 'processPanel' ? (
                 <ProcessPanelTab tab={tab} />
+              ) : tab.kind === 'tmuxPanel' ? (
+                <TmuxPanelTab tab={tab} />
               ) : tab.kind === 'rdp' ? (
                 <RdpPane tab={tab} active={active} />
+              ) : tab.kind === 'tmuxAttach' ? (
+                /* 附着标签就是终端画面（tmux attach 通道），但不带 SFTP 分屏 —— 它不是 shell */
+                <TerminalPane tab={tab} active={active} uiMode={uiMode} />
               ) : (
               <>
               {/*

@@ -7,15 +7,16 @@ import { useSettingsStore } from './useSettingsStore'
 import { useMonitorStore } from './useMonitorStore'
 import { usePortTrafficStore } from './usePortTrafficStore'
 import { useProcessPanelStore } from './useProcessPanelStore'
+import { useTmuxStore } from './useTmuxStore'
 import { useConnectionStore } from './useConnectionStore'
 
-export type SessionTabKind = 'terminal' | 'portTraffic' | 'processPanel' | 'rdp'
+export type SessionTabKind = 'terminal' | 'portTraffic' | 'processPanel' | 'rdp' | 'tmuxPanel' | 'tmuxAttach'
 
 export interface SessionTab {
   id: string
   /** 未标记的旧 tab 视为 terminal，避免升级时破坏运行中的状态。 */
   kind?: SessionTabKind
-  /** portTraffic / processPanel 等工具标签依附的终端标签；关闭源标签时会被一并关闭。 */
+  /** portTraffic / processPanel / tmuxPanel 等工具标签依附的终端标签；关闭源标签时会被一并关闭。 */
   sourceTabId?: string
   profileId: string
   sessionId: SessionId | null
@@ -26,6 +27,10 @@ export interface SessionTab {
   /** idle=尚未发起；其余同 SessionState */
   state: SessionState | 'idle'
   error?: string
+  /** tmuxAttach 标签的附着目标：tmux 内部 session_id（`$N`），所有操作的寻址键。 */
+  targetId?: string
+  /** tmuxAttach 标签的目标会话名（只作显示，不作为寻址键）。 */
+  tmuxName?: string
   /** Stable machine-readable RDP failure classification, retained beside display text. */
   errorCode?: RdpErrorCode
   audioState?: RdpAudioState
@@ -72,6 +77,24 @@ interface SessionStore {
   openPortTrafficTab: (id: string, title: string) => void
   /** 在当前窗口打开依附于既有 SSH 会话的进程面板标签，不重复登录。 */
   openProcessPanelTab: (id: string, title: string) => void
+  /**
+   * 打开 profile 的 Tmux 面板标签（连接树右键 / 终端工具条共用入口）。
+   * 连接复用按方案 §3：优先复用当前活动终端标签的连接，其次第一个就绪的；
+   * 命中则面板成为该终端的子面板（随源终端关闭）；未命中则内部 session:open，
+   * 面板自有连接，随面板关闭而断开。
+   */
+  openTmuxPanelTab: (profileId: string) => void
+  /**
+   * 新开 tmux 附着标签：内部 session:open 建立**自有连接**（一个附着标签一条连接），
+   * 就绪后由 TerminalPane 的附着 effect 调 tmux:attach 直进会话画面，不经过 shell。
+   */
+  openTmuxAttachTab: (profileId: string, targetId: string, name?: string) => Promise<void>
+  /**
+   * 附着标签的「重新附着」专用动作：清 termId、恢复 ready、递增附着 epoch，
+   * 让 TerminalPane 的附着 effect 重跑。不走 session:reconnect —— detach 后连接
+   * 仍在，重连只会白白推倒重来；连接确实已断时先在内部走一遍正常重连。
+   */
+  reattachTmuxTab: (id: string) => Promise<void>
 }
 
 /**
@@ -147,6 +170,13 @@ function uniqueTitle(tabs: SessionTab[], base: string): string {
   }
   return base
 }
+
+/**
+ * 因 **detach**（prefix+d / tmux 客户端退出）进入已退出态的 tmuxAttach 标签。
+ * 这时 SSH 连接仍然活着 —— 「重新附着」不需要 session:reconnect，直接重开附着通道。
+ * 断线（session:state 非 ready）会把它清掉，之后重附着走正常重连路径。
+ */
+const tmuxDetachedTabs = new Set<string>()
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   tabs: [],
@@ -236,7 +266,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   duplicateTab: async (id, profiles) => {
     const tab = get().tabs.find((t) => t.id === id)
-    if (tab?.kind === 'portTraffic' || tab?.kind === 'processPanel') return
+    if (tab?.kind === 'portTraffic' || tab?.kind === 'processPanel' || tab?.kind === 'tmuxPanel') return
+    // 复制附着标签 = 对同一目标再附着一次（自带一条新连接，不共享原标签的通道）
+    if (tab?.kind === 'tmuxAttach') {
+      if (tab.targetId) await get().openTmuxAttachTab(tab.profileId, tab.targetId, tab.tmuxName)
+      return
+    }
     const profile = profiles.find((p) => p.id === tab?.profileId)
     if (profile) {
       if (profile.protocol === 'rdp') await get().openRdpForProfile(profile)
@@ -247,10 +282,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   closeTab: async (id) => {
     const tab = get().tabs.find((t) => t.id === id)
     const closingIds = new Set<string>([id])
-    if (tab?.kind !== 'portTraffic' && tab?.kind !== 'processPanel') {
+    if (tab?.kind === 'tmuxAttach') tmuxDetachedTabs.delete(id)
+    if (tab?.kind !== 'portTraffic' && tab?.kind !== 'processPanel' && tab?.kind !== 'tmuxPanel') {
       for (const candidate of get().tabs) {
         if (
-          (candidate.kind === 'portTraffic' || candidate.kind === 'processPanel') &&
+          (candidate.kind === 'portTraffic' ||
+            candidate.kind === 'processPanel' ||
+            candidate.kind === 'tmuxPanel') &&
           candidate.sourceTabId === id
         ) {
           closingIds.add(candidate.id)
@@ -284,6 +322,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         useProcessPanelStore.getState().clear(tab.sessionId)
         return
       }
+      if (tab.kind === 'tmuxPanel') {
+        await useTmuxStore.getState().stop(tab.sessionId).catch(() => {})
+        useTmuxStore.getState().clear(tab.sessionId)
+        // 借用型面板：连接归源终端所有，这里不动；自有连接随面板关闭而断开
+        if (!tab.sourceTabId) await ofs.invoke('session:close', tab.sessionId).catch(() => {})
+        return
+      }
+      if (tab.kind === 'tmuxAttach') {
+        // 关闭附着标签 = detach：附着通道由 TerminalPane 卸载时 term:close，远端会话继续存活。
+        // 这条连接是该标签自有的，随标签关闭断开。
+        await ofs.invoke('session:close', tab.sessionId).catch(() => {})
+        return
+      }
       if (tab.kind === 'rdp') {
         await ofs.invoke('rdp:close', tab.sessionId).catch(() => {})
         return
@@ -301,10 +352,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   closeOthers: async (id) => {
     const selected = get().tabs.find((t) => t.id === id)
-    // 流量标签依附源终端；“关闭其他”时保留这个必要的源标签，避免把当前标签一并删掉。
+    // 流量/进程/Tmux 面板标签依附源终端；“关闭其他”时保留这个必要的源标签，避免把当前标签一并删掉。
     const keepIds = new Set([id])
     if (
-      (selected?.kind === 'portTraffic' || selected?.kind === 'processPanel') &&
+      (selected?.kind === 'portTraffic' ||
+        selected?.kind === 'processPanel' ||
+        selected?.kind === 'tmuxPanel') &&
       selected.sourceTabId
     ) {
       keepIds.add(selected.sourceTabId)
@@ -324,8 +377,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   reconnectTab: async (id) => {
     const tab = get().tabs.find((t) => t.id === id)
     if (!tab) return
-    if (tab.kind === 'portTraffic' || tab.kind === 'processPanel') {
+    if (
+      tab.kind === 'portTraffic' ||
+      tab.kind === 'processPanel' ||
+      tab.kind === 'tmuxPanel'
+    ) {
       if (tab.sourceTabId) await get().reconnectTab(tab.sourceTabId)
+      return
+    }
+    if (tab.kind === 'tmuxAttach') {
+      // 附着标签的"重连"语义 = 重新附着（连接仍在时只是重开附着通道）
+      await get().reattachTmuxTab(id)
       return
     }
     if (tab.kind === 'rdp') {
@@ -479,6 +541,140 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       monitorOpen: false
     }
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
+  },
+
+  openTmuxPanelTab: (profileId) => {
+    const { tabs, activeTabId } = get()
+    // 同一 profile 的面板只开一个：再点入口只是回到已开的那个
+    const existing = tabs.find((t) => t.kind === 'tmuxPanel' && t.profileId === profileId)
+    if (existing) {
+      set({ activeTabId: existing.id })
+      return
+    }
+    const profile = useConnectionStore.getState().profiles.find((p) => p.id === profileId)
+    if (!profile) return
+    const title = `${profile.name} · ${i18n.t('tmux.tab')}`
+    // §3 连接复用：profileId 相同、state==='ready' 且有 sessionId 的终端标签 ——
+    // 活动标签优先，其次第一个就绪的。tmuxAttach 自有连接，不作复用候选。
+    const candidates = tabs.filter(
+      (t): t is SessionTab & { sessionId: SessionId } =>
+        t.kind === 'terminal' && t.profileId === profileId && t.state === 'ready' && !!t.sessionId
+    )
+    const source = candidates.find((t) => t.id === activeTabId) ?? candidates[0]
+    if (source) {
+      // 复用：面板成为源终端的子面板，源终端关闭时级联关闭（同 portTraffic/processPanel）
+      const tab: SessionTab = {
+        ...source,
+        id: crypto.randomUUID(),
+        kind: 'tmuxPanel',
+        sourceTabId: source.id,
+        title,
+        customTitle: undefined,
+        termId: null,
+        sftpOpen: false,
+        monitorOpen: false
+      }
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
+      return
+    }
+    // 未命中：面板自有连接（走完整认证流程），随面板关闭而断开
+    const tabId = crypto.randomUUID()
+    const tab: SessionTab = {
+      id: tabId,
+      kind: 'tmuxPanel',
+      profileId,
+      sessionId: null,
+      termId: null,
+      title,
+      color: profile.color,
+      state: 'connecting',
+      sftpOpen: false,
+      monitorOpen: false,
+      shellEpoch: 0
+    }
+    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tabId }))
+    void ofs
+      .invoke('session:open', profileId)
+      .then(({ sessionId }) => get().claimSession(tabId, sessionId))
+      .catch((err: Error) => {
+        get().updateTab(tabId, { state: 'closed', error: err.message })
+      })
+  },
+
+  openTmuxAttachTab: async (profileId, targetId, name) => {
+    const profile = useConnectionStore.getState().profiles.find((p) => p.id === profileId)
+    if (!profile) return
+    const tabId = crypto.randomUUID()
+    const tab: SessionTab = {
+      id: tabId,
+      kind: 'tmuxAttach',
+      profileId,
+      targetId,
+      ...(name ? { tmuxName: name } : {}),
+      sessionId: null,
+      termId: null,
+      // 标签标题 `A · tmux a`（方案 §7）：服务器名 · 会话名；重名时追加 (2)(3)
+      title: uniqueTitle(get().tabs, `${profile.name} · tmux ${name ?? targetId}`),
+      color: profile.color,
+      state: 'connecting',
+      sftpOpen: false,
+      monitorOpen: false,
+      shellEpoch: 0
+    }
+    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tabId }))
+    try {
+      // 附着标签自有连接：一个标签一条连接，与面板/终端互不影响
+      const { sessionId } = await ofs.invoke('session:open', profileId)
+      get().claimSession(tabId, sessionId)
+    } catch (err) {
+      get().updateTab(tabId, {
+        state: 'closed',
+        error: err instanceof Error ? err.message : String(err)
+      })
+    }
+  },
+
+  reattachTmuxTab: async (id) => {
+    const tab = get().tabs.find((t) => t.id === id)
+    if (!tab || tab.kind !== 'tmuxAttach' || !tab.targetId) return
+    const detachedAlive = tmuxDetachedTabs.has(id)
+    tmuxDetachedTabs.delete(id)
+    // detach 后连接仍在 → 不重连，直接重开附着通道；连接已断 → 先走正常重连
+    if (!detachedAlive && tab.sessionId && tab.state === 'closed') {
+      get().updateTab(id, { state: 'connecting', error: undefined })
+      try {
+        await ofs.invoke('session:reconnect', tab.sessionId)
+      } catch {
+        // 主进程里这个会话对象已不在（重启/被清理）→ 丢弃旧 id，下面走全新 session:open
+        get().updateTab(id, { sessionId: null })
+      }
+    }
+    let current = get().tabs.find((t) => t.id === id)
+    if (!current) return
+    if (!current.sessionId) {
+      try {
+        const { sessionId } = await ofs.invoke('session:open', current.profileId)
+        get().claimSession(id, sessionId)
+      } catch (err) {
+        get().updateTab(id, {
+          state: 'closed',
+          error: err instanceof Error ? err.message : String(err)
+        })
+        return
+      }
+      current = get().tabs.find((t) => t.id === id)
+      if (!current) return
+    }
+    // 专用附着 epoch：清 termId、恢复 ready（reconnecting 时留给 session:state 事件），
+    // 递增计数驱动 TerminalPane 的附着 effect 重跑
+    const nextState: SessionState | 'idle' =
+      current.state === 'reconnecting' ? current.state : 'ready'
+    get().updateTab(id, {
+      termId: null,
+      state: nextState,
+      error: undefined,
+      shellEpoch: current.shellEpoch + 1
+    })
   }
 }))
 
@@ -496,10 +692,14 @@ export function wireSessionEvents(): void {
       if (tab.sessionId !== sessionId) continue
       claimed = true
       updateTab(tab.id, { state, error })
-      if (state !== 'ready') continue
+      if (state !== 'ready') {
+        // 连接出问题（reconnecting/closed）：detach 标记作废，此后「重新附着」要先走正常重连
+        if (tab.kind === 'tmuxAttach') tmuxDetachedTabs.delete(tab.id)
+        continue
+      }
       // 注意 tab 是本次更新前的快照：everReady 为假即首次连上，不算"恢复"
       if (tab.everReady) {
-        // 重新建连 → 让 TerminalPane 重开 shell 并打恢复分隔线（xterm 缓冲保留）
+        // 重新建连 → 让 TerminalPane 重开 shell（tmuxAttach 标签则重开附着通道）并打恢复分隔线（xterm 缓冲保留）
         if (tab.termId === null) updateTab(tab.id, { shellEpoch: tab.shellEpoch + 1 })
       } else {
         updateTab(tab.id, { everReady: true })
@@ -542,9 +742,15 @@ export function wireSessionEvents(): void {
     for (const tab of tabs) {
       if (tab.termId !== termId) continue
       updateTab(tab.id, { termId: null })
-      // 连接仍在（用户敲 exit）→ 标记结束，浮层给重连/关闭；reconnected 由 session:state 驱动重开
+      // 连接仍在（用户敲 exit / tmux 客户端退出）→ 标记结束，浮层给重连/关闭；reconnected 由 session:state 驱动重开
       if (reason === 'closed' && tab.state === 'ready') {
-        updateTab(tab.id, { state: 'closed', error: '会话已结束' })
+        if (tab.kind === 'tmuxAttach') {
+          // detach（prefix+d）：SSH 连接还活着，记下来让「重新附着」跳过重连直接重开通道
+          tmuxDetachedTabs.add(tab.id)
+          updateTab(tab.id, { state: 'closed', error: i18n.t('tmux.detached') })
+        } else {
+          updateTab(tab.id, { state: 'closed', error: '会话已结束' })
+        }
       }
     }
   })

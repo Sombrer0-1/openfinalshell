@@ -21,7 +21,8 @@ import type {
   SnippetGroup,
   TransferEnqueueItem,
   TransferTask,
-  TrustedHostkey
+  TrustedHostkey,
+  TmuxSessionInfo
 } from '@shared/types'
 
 /**
@@ -241,6 +242,37 @@ export function createMockOfs(): OfsApi {
   const monitorTimers = new Map<string, ReturnType<typeof setInterval>>()
   const portTrafficTimers = new Map<string, ReturnType<typeof setInterval>>()
   const processPanelTimers = new Map<string, ReturnType<typeof setInterval>>()
+  const tmuxTimers = new Map<string, ReturnType<typeof setInterval>>()
+  /** 每条 SSH 会话一份假 tmux server 状态（面板与附着标签共用同一份列表） */
+  const tmuxMock = new Map<string, { sessions: TmuxSessionInfo[]; mouseOn: boolean; nextId: number }>()
+
+  function startMockTmux(sessionId: string): void {
+    if (tmuxTimers.has(sessionId)) return
+    if (!tmuxMock.has(sessionId)) {
+      const nowSec = Math.floor(Date.now() / 1000)
+      tmuxMock.set(sessionId, {
+        // mouse 默认 off：让提示条在浏览器里一打开就能看到
+        sessions: [
+          { id: '$0', name: 'main', windows: 3, attached: 1, created: nowSec - 7200 },
+          { id: '$1', name: 'build', windows: 1, attached: 0, created: nowSec - 600 }
+        ],
+        mouseOn: false,
+        nextId: 2
+      })
+    }
+    const push = (): void => {
+      const st = tmuxMock.get(sessionId)!
+      emit('tmux:sessions', {
+        sessionId,
+        ts: Date.now(),
+        sessions: st.sessions.map((s) => ({ ...s })),
+        mouseOn: st.mouseOn
+      })
+    }
+    emit('tmux:state', { sessionId, state: 'running' })
+    push()
+    tmuxTimers.set(sessionId, setInterval(push, 2000))
+  }
 
   function startMockProcessPanel(sessionId: string): void {
     if (processPanelTimers.has(sessionId)) return
@@ -1073,7 +1105,65 @@ export function createMockOfs(): OfsApi {
       }
       return detail
     },
-    'processPanel:kill': () => undefined
+    'processPanel:kill': () => undefined,
+
+    // --- 假 tmux：内存会话表 + 2s 推帧；附着通道复用假终端的回显 ---
+    'tmux:start': (sessionId: never) => startMockTmux(sessionId as unknown as string),
+    'tmux:stop': (sessionId: never) => {
+      const id = sessionId as unknown as string
+      const timer = tmuxTimers.get(id)
+      if (timer) clearInterval(timer)
+      tmuxTimers.delete(id)
+      tmuxMock.delete(id)
+      emit('tmux:state', { sessionId: id, state: 'stopped' })
+    },
+    'tmux:new': (arg: never) => {
+      const { sessionId, name } = arg as unknown as { sessionId: string; name: string }
+      const st = tmuxMock.get(sessionId)
+      // 面板没开过就调 new：真机上是 execOnce 直接跑命令；mock 里给同款错误文案即可
+      if (!st) throw new Error(i18n.t('err.net.tmuxNewFailed', { reason: 'mock not started' }))
+      if (st.sessions.some((s) => s.name === name)) {
+        throw new Error(i18n.t('err.net.duplicateSession', { name }))
+      }
+      const id = `$${st.nextId++}`
+      st.sessions.push({ id, name, windows: 1, attached: 0, created: Math.floor(Date.now() / 1000) })
+      return { id }
+    },
+    'tmux:kill': (arg: never) => {
+      const { sessionId, targetId } = arg as unknown as { sessionId: string; targetId: string }
+      const st = tmuxMock.get(sessionId)
+      if (!st) throw new Error(i18n.t('err.net.tmuxKillFailed', { reason: 'mock not started' }))
+      const idx = st.sessions.findIndex((s) => s.id === targetId)
+      if (idx < 0) throw new Error(i18n.t('err.net.sessionGone'))
+      st.sessions.splice(idx, 1)
+    },
+    'tmux:setMouse': (arg: never) => {
+      const { sessionId, enabled } = arg as unknown as { sessionId: string; enabled: boolean }
+      const st = tmuxMock.get(sessionId)
+      if (st) st.mouseOn = enabled
+    },
+    'tmux:attach': (arg: never) => {
+      const { sessionId, targetId, cols, rows } = arg as unknown as {
+        sessionId: string
+        targetId: string
+        cols: number
+        rows: number
+      }
+      const st = tmuxMock.get(sessionId)
+      // 同款 has-session 前置检查：目标不在 → sessionGone
+      const row = st?.sessions.find((s) => s.id === targetId)
+      if (!st || !row) throw new Error(i18n.t('err.net.sessionGone'))
+      row.attached += 1
+      const termId = crypto.randomUUID()
+      terms.set(termId, { sessionId, line: '' })
+      setTimeout(() => {
+        writeTerm(
+          termId,
+          `\x1b[32m[tmux]\x1b[0m attached to "${row.name}" ${cols}x${rows} — 浏览器 mock，非真实 tmux\r\n`
+        )
+      }, 60)
+      return { termId }
+    }
   }
 
   const handleInput = (termId: string, data: string): void => {

@@ -22,11 +22,15 @@ function tabMenuItems(tab: SessionTab, t: (key: string) => string) {
     { key: 'closeToRight', label: t('tab.closeToRight') },
     { key: 'closeAll', label: t('tab.closeAll'), danger: true }
   ]
-  if (tab.kind === 'portTraffic' || tab.kind === 'processPanel') return closeItems
+  // 借用型工具标签（含 tmuxPanel）没有独立生命周期，只给关闭类操作。
+  // tmuxAttach 保留完整菜单：重命名、复制（= 再附着一次）、重连（= 重新附着）都有意义。
+  if (tab.kind === 'portTraffic' || tab.kind === 'processPanel' || tab.kind === 'tmuxPanel') {
+    return closeItems
+  }
   return [
     { key: 'rename', label: t('tab.rename') },
     { key: 'duplicate', label: t('tab.duplicate') },
-    { key: 'reconnect', label: t('tab.reconnect') },
+    { key: 'reconnect', label: tab.kind === 'tmuxAttach' ? t('tmux.reattach') : t('tab.reconnect') },
     { type: 'divider' as const },
     ...closeItems
   ]

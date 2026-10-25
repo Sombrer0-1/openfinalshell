@@ -28,6 +28,7 @@ export function ConnectionTreePanel(): React.JSX.Element {
   const { profiles, groups, loaded, searchText, load, remove, duplicate, saveGroup, removeGroup, setSearchText } =
     useConnectionStore()
   const launchProfile = useSessionStore((s) => s.launchProfile)
+  const openTmuxPanelTab = useSessionStore((s) => s.openTmuxPanelTab)
   const setEditingProfile = useUiStore((s) => s.setEditingProfile)
   // 连接列表默认对 host 打码（截图脱敏）；用户可在设置里关掉。完整 host 仍用于连接/复制/搜索
   const maskInList = useSettingsStore((s) => s.settings?.connection.maskHostInList ?? true)
@@ -115,6 +116,8 @@ export function ConnectionTreePanel(): React.JSX.Element {
         menu={{
           items: [
             { key: 'connect', label: t('conn.connect') },
+            // RDP 配置没有 SSH 通道，不显示 tmux 入口（方案 §2）
+            ...(p.protocol !== 'rdp' ? [{ key: 'tmux', label: t('tmux.open') }] : []),
             { key: 'edit', label: t('common.edit') },
             { key: 'duplicate', label: t('conn.duplicate') },
             { key: 'copyCmd', label: t('conn.copySshCommand') },
@@ -124,6 +127,7 @@ export function ConnectionTreePanel(): React.JSX.Element {
           onClick: ({ key, domEvent }) => {
             domEvent.stopPropagation()
             if (key === 'connect') connect(p)
+            else if (key === 'tmux') openTmuxPanelTab(p.id)
             else if (key === 'edit') setEditingProfile(p.id)
             else if (key === 'duplicate') void duplicate(p.id)
             else if (key === 'delete') confirmDeleteProfile(p)

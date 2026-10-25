@@ -1,7 +1,7 @@
 import { IconButton } from '@/components/ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { App as AntdApp, Button, Dropdown, Spin } from 'antd'
-import { Activity, Eraser, FolderTree, History, Search, Unplug } from 'lucide-react'
+import { Activity, Eraser, FolderTree, History, Layers, Search, Unplug } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { DEFAULT_SETTINGS, TERM_FONT_SIZE_MAX, TERM_FONT_SIZE_MIN } from '@shared/constants'
@@ -59,6 +59,8 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
   const updateTab = useSessionStore((s) => s.updateTab)
   const closeTab = useSessionStore((s) => s.closeTab)
   const reconnectTab = useSessionStore((s) => s.reconnectTab)
+  const reattachTmux = useSessionStore((s) => s.reattachTmuxTab)
+  const openTmuxPanelTab = useSessionStore((s) => s.openTmuxPanelTab)
   const toggleSftp = useSessionStore((s) => s.toggleSftp)
   const toggleMonitor = useSessionStore((s) => s.toggleMonitor)
   const profile = useConnectionStore((s) => s.profiles.find((p) => p.id === tab.profileId))
@@ -419,15 +421,24 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     [pasteFromClipboard, settings.terminal.rightClick]
   )
 
-  // ---- 会话 ready / 重连（shellEpoch 变化）→ 开 shell ----
+  // ---- 会话 ready / 重连（shellEpoch 变化）→ 开 shell；tmuxAttach → 附着通道 ----
   useEffect(() => {
     const bundle = bundleRef.current
     if (!bundle || tab.state !== 'ready' || tab.termId || !tab.sessionId || openingRef.current) return
+    // 未标记 kind 的旧 tab 视为 terminal（SessionTab.kind 的既有约定）
+    const kind = tab.kind ?? 'terminal'
+    if (kind !== 'terminal' && kind !== 'tmuxAttach') return
+    // 附着模式：不开 shell，直接 exec `tmux attach`（自带 pty）；目标必须已带在标签上
+    const targetId = kind === 'tmuxAttach' ? tab.targetId : undefined
+    if (kind === 'tmuxAttach' && !targetId) return
     openingRef.current = true
     sendResize()
     const { cols, rows } = bundle.term
-    void ofs
-      .invoke('term:open', { sessionId: tab.sessionId, cols, rows })
+    const opening: Promise<{ termId: string }> =
+      kind === 'tmuxAttach'
+        ? ofs.invoke('tmux:attach', { sessionId: tab.sessionId, targetId: targetId!, cols, rows })
+        : ofs.invoke('term:open', { sessionId: tab.sessionId, cols, rows })
+    void opening
       .then(async ({ termId }) => {
         if (bundleRef.current !== bundle) {
           await ofs.invoke('term:close', termId)
@@ -440,12 +451,16 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         // Layout may have changed while the SSH shell request was in flight.
         sendResize()
         if (tab.shellEpoch > 0) {
-          bundle.term.write(`\r\n\x1b[2m—— ${i18n.t('terminal.reconnected')} ——\x1b[0m\r\n`)
+          const separator =
+            kind === 'tmuxAttach' ? i18n.t('tmux.reattached') : i18n.t('terminal.reconnected')
+          bundle.term.write(`\r\n\x1b[2m—— ${separator} ——\x1b[0m\r\n`)
         }
+        // tmux:attach 与 term:open 同款握手：不 ready 一下，ShellSession 会一直缓冲输出
         await ofs.invoke('term:ready', termId)
         if (active && bundleRef.current === bundle) bundle.term.focus()
       })
       .catch((err: Error) => {
+        // 附着失败（如重连期间会话被外部杀掉 → sessionGone）原样透出，已退出浮层给重试
         updateTab(tab.id, { state: 'closed', error: err.message })
       })
       .finally(() => {
@@ -457,6 +472,8 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
     tab.sessionId,
     tab.shellEpoch,
     tab.id,
+    tab.kind,
+    tab.targetId,
     active,
     bindTerm,
     updateTab,
@@ -537,20 +554,31 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
 
       {active && !connecting && !closed && (
         <div className={styles.hoverTools}>
-          <TitlebarSafeTooltip title={tab.sftpOpen ? t('terminal.closeSftp') : t('terminal.openSftp')}>
-            <IconButton label={tab.sftpOpen ? t('terminal.closeSftp') : t('terminal.openSftp')}
+          {tab.kind !== 'tmuxAttach' && (
+            <TitlebarSafeTooltip title={tab.sftpOpen ? t('terminal.closeSftp') : t('terminal.openSftp')}>
+              <IconButton label={tab.sftpOpen ? t('terminal.closeSftp') : t('terminal.openSftp')}
+                size="small"
+                selected={tab.sftpOpen}
+                icon={<FolderTree size={14} strokeWidth={1.75} />}
+                onClick={() => toggleSftp(tab.id)}
+              />
+            </TitlebarSafeTooltip>
+          )}
+          {tab.kind !== 'tmuxAttach' && (
+            <TitlebarSafeTooltip title={tab.monitorOpen ? t('terminal.closeMonitor') : t('terminal.openMonitor')}>
+              <IconButton label={tab.monitorOpen ? t('terminal.closeMonitor') : t('terminal.openMonitor')}
+                size="small"
+                selected={tab.monitorOpen}
+                icon={<Activity size={14} strokeWidth={1.75} />}
+                onClick={() => toggleMonitor(tab.id)}
+              />
+            </TitlebarSafeTooltip>
+          )}
+          <TitlebarSafeTooltip title={t('tmux.toolbarOpen')}>
+            <IconButton label={t('tmux.toolbarOpen')}
               size="small"
-              selected={tab.sftpOpen}
-              icon={<FolderTree size={14} strokeWidth={1.75} />}
-              onClick={() => toggleSftp(tab.id)}
-            />
-          </TitlebarSafeTooltip>
-          <TitlebarSafeTooltip title={tab.monitorOpen ? t('terminal.closeMonitor') : t('terminal.openMonitor')}>
-            <IconButton label={tab.monitorOpen ? t('terminal.closeMonitor') : t('terminal.openMonitor')}
-              size="small"
-              selected={tab.monitorOpen}
-              icon={<Activity size={14} strokeWidth={1.75} />}
-              onClick={() => toggleMonitor(tab.id)}
+              icon={<Layers size={14} strokeWidth={1.75} />}
+              onClick={() => openTmuxPanelTab(tab.profileId)}
             />
           </TitlebarSafeTooltip>
           <TitlebarSafeTooltip title={t('terminal.search')}>
@@ -634,7 +662,30 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         </div>
       )}
 
-      {closed && (
+      {closed && tab.kind === 'tmuxAttach' && (
+        /* 附着通道已退出（prefix+d detach 或会话被 kill）。远端会话可能还活着 ——
+           「重新附着」重开通道，「关闭标签」只是 detach，都不会 kill 远端会话 */
+        <div className={styles.overlay}>
+          <div className={`${styles.overlayText} ${styles.overlayError}`}>
+            {tab.error ?? t('tmux.detached')}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              size="small"
+              type="primary"
+              disabled={!tab.targetId}
+              onClick={() => void reattachTmux(tab.id)}
+            >
+              {t('tmux.reattach')}
+            </Button>
+            <Button size="small" onClick={() => void closeTab(tab.id)}>
+              {t('tmux.closeTab')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {closed && tab.kind !== 'tmuxAttach' && (
         <div className={styles.overlay}>
           <div className={`${styles.overlayText} ${styles.overlayError}`}>
             {tab.error ?? t('terminal.disconnected')}

@@ -16,6 +16,7 @@ import { useTransferStore, wireTransferEvents } from '@/stores/useTransferStore'
 import { wireMonitorEvents } from '@/stores/useMonitorStore'
 import { wirePortTrafficEvents } from '@/stores/usePortTrafficStore'
 import { wireProcessPanelEvents } from '@/stores/useProcessPanelStore'
+import { wireTmuxEvents } from '@/stores/useTmuxStore'
 import { wireForwardEvents } from '@/stores/useForwardStore'
 import { wireUpdateEvents } from '@/stores/useUpdateStore'
 import { wireLanSyncEvents } from '@/stores/useLanSyncStore'
@@ -38,6 +39,7 @@ export default function App(): React.JSX.Element {
     wireMonitorEvents()
     wirePortTrafficEvents()
     wireProcessPanelEvents()
+    wireTmuxEvents()
     wireForwardEvents()
     wireUpdateEvents()
     wireLanSyncEvents()

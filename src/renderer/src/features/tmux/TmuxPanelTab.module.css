@@ -1,0 +1,201 @@
+.page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--ofs-bg-base);
+}
+
+.header {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--ofs-shell-border);
+  background: var(--ofs-shell-surface);
+}
+
+.title {
+  color: var(--ofs-text-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--ofs-text-3);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* ---- 新建表单（头部下方展开） ---- */
+.createForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--ofs-shell-border);
+  background: color-mix(in srgb, var(--ofs-shell-surface) 70%, var(--ofs-bg-base));
+}
+
+.createForm .nameInput {
+  width: 220px;
+}
+
+.createForm .enterCheck {
+  color: var(--ofs-text-2);
+  user-select: none;
+}
+
+.formError {
+  flex-basis: 100%;
+  color: var(--ofs-error);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* ---- 列表 ---- */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-bottom: 1px solid var(--ofs-border);
+  background: var(--ofs-solid-surface);
+}
+
+.table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--ofs-border);
+  white-space: nowrap;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--ofs-text-3);
+  background: var(--ofs-solid-surface);
+  font-weight: 500;
+  user-select: none;
+}
+
+.table tbody tr:hover { background: var(--ofs-bg-hover); }
+
+.nameCell { color: var(--ofs-text-1); }
+
+.num { text-align: right; }
+.table th.num,
+.table td.num { text-align: right; }
+
+.attachedBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ofs-accent) 26%, transparent);
+  color: var(--ofs-text-1);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.attachedNone {
+  color: var(--ofs-text-3);
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.createdCell { color: var(--ofs-text-2); }
+
+/* ---- 鼠标提示条 ---- */
+.mouseTip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  background: color-mix(in srgb, var(--ofs-accent) 12%, var(--ofs-shell-surface));
+  border-bottom: 1px solid var(--ofs-shell-border);
+  color: var(--ofs-text-1);
+  font-size: 12px;
+}
+
+.mouseTipIcon {
+  flex: none;
+  color: var(--ofs-accent);
+  display: inline-flex;
+}
+
+.mouseTipText {
+  flex: 1;
+  min-width: 0;
+  color: var(--ofs-text-2);
+}
+
+.mouseTipClose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ofs-text-3);
+  cursor: pointer;
+}
+
+.mouseTipClose:hover {
+  background: var(--ofs-bg-hover);
+  color: var(--ofs-text-1);
+}
+
+.empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--ofs-text-3);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  :global(:root:not([data-reduce-transparency='true'])) .header {
+    -webkit-backdrop-filter: blur(14px) saturate(1.06);
+    backdrop-filter: blur(14px) saturate(1.06);
+  }
+}
