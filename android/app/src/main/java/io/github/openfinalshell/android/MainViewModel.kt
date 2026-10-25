@@ -3,6 +3,8 @@ package io.github.openfinalshell.android
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -521,8 +523,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** True when this process still has sockets or a connect attempt. Empty after process death. */
     fun hasBackgroundWork(): Boolean {
-        // Prefer live SshSessionManager snapshots over UI state (collector can lag).
-        val activeSessions = sessions.sessions.value.values.count { it.state != SessionState.CLOSED }
+        // Either side can momentarily lag during a connect: the sessions StateFlow is published
+        // under the manager lock, the Compose mirror follows via a collector. Counting the max of
+        // both keeps a racing finishConnectAttempt from tearing down a live FGS.
+        val activeSessions = maxOf(
+            state.value.sessions.values.count { it.state != SessionState.CLOSED },
+            sessions.sessions.value.values.count { it.state != SessionState.CLOSED }
+        )
         val activeTransfers = state.value.transfers.count { task ->
             task.state == io.github.openfinalshell.android.core.sftp.TransferState.RUNNING ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
@@ -766,6 +773,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var lastPublishedKeepAlive: SessionKeepAlivePolicy.PublishedCounts? = null
     private var connectsInFlight = 0
     private var notificationPermissionPrompted = false
+    // Restoring sessions on cold start flaps READY→CLOSED→RECONNECTING within a second while
+    // auto-reconnect retries. Honoring every transient hold=false immediately races the UPDATEs
+    // that follow and can leave the FGS stopped under a live session, so a hold=false STOP is
+    // deferred and re-checked; any hold=true cancels it.
+    private val keepAliveHandler = Handler(Looper.getMainLooper())
+    private var stopKeepAlivePending = false
+    /** Grace period before tearing the FGS down after a transient hold=false. */
+    private val keepAliveStopDebounceMs = 5_000L
     private val _requestNotificationPermission = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /** One-shot signal so the UI can request POST_NOTIFICATIONS before/while FGS runs (API 33+). */
     val requestNotificationPermission: SharedFlow<Unit> = _requestNotificationPermission.asSharedFlow()
@@ -777,9 +792,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun updateBackgroundService() {
-        // Authority for sockets is SshSessionManager, not the Compose state mirror.
-        // Using UI state here caused false STOP when finishConnectAttempt raced the collector.
-        val activeSessions = sessions.sessions.value.values.count { it.state != SessionState.CLOSED }
+        // Same max-of-both-sources rule as hasBackgroundWork: the manager flow and the Compose
+        // mirror each lag on different phases of a connect, so a single source can miss a live
+        // session and send a false STOP right after a successful connect.
+        val activeSessions = maxOf(
+            state.value.sessions.values.count { it.state != SessionState.CLOSED },
+            sessions.sessions.value.values.count { it.state != SessionState.CLOSED }
+        )
         val activeTransfers = state.value.transfers.count { task ->
             task.state == io.github.openfinalshell.android.core.sftp.TransferState.RUNNING ||
                 task.state == io.github.openfinalshell.android.core.sftp.TransferState.QUEUED ||
@@ -795,6 +814,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         if (hold) {
             keepAliveStarted = true
+            if (stopKeepAlivePending) {
+                stopKeepAlivePending = false
+                keepAliveHandler.removeCallbacks(stopKeepAliveRunnable)
+            }
             promptNotificationPermissionOnce()
             val next = SessionKeepAlivePolicy.PublishedCounts(
                 sessions = activeSessions,
@@ -815,11 +838,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 activeForwards,
                 connecting = connecting
             )
-        } else if (keepAliveStarted) {
-            keepAliveStarted = false
-            lastPublishedKeepAlive = null
-            ConnectionForegroundService.stop(getApplication())
+        } else if (keepAliveStarted && !stopKeepAlivePending) {
+            // Defer the STOP: a restore/auto-reconnect flap can go READY→CLOSED→RECONNECTING
+            // within a second, and an immediate stop races the UPDATEs that follow. Re-check
+            // after the debounce window; sessions that are truly gone still get torn down.
+            stopKeepAlivePending = true
+            keepAliveHandler.postDelayed(stopKeepAliveRunnable, keepAliveStopDebounceMs)
         }
+    }
+
+    private val stopKeepAliveRunnable = Runnable {
+        // A hold=true during the window cancelled this run (stopKeepAlivePending cleared).
+        if (!stopKeepAlivePending) return@Runnable
+        stopKeepAlivePending = false
+        keepAliveStarted = false
+        lastPublishedKeepAlive = null
+        ConnectionForegroundService.stop(getApplication())
     }
 
     private fun holdProcessForConnect() {
@@ -1413,6 +1447,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun reconnectSession(sessionId: String) {
         viewModelScope.launch {
             runCatching { sessions.reconnect(sessionId) }
+                .onSuccess {
+                    // reconnect() never calls begin(), so the FGS is only kept alive if a
+                    // publish happens here; without it a reconnect leaves the session dead
+                    // in the background once the user leaves the app.
+                    updateBackgroundService()
+                }
                 .onFailure { setStatus(readableError(it, StatusKey.CONNECTION_FAILED)) }
         }
     }
@@ -3372,6 +3412,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        keepAliveHandler.removeCallbacksAndMessages(null)
         transferQueue.cancelAll()
         conflictDecision?.complete(BatchChoice(ConflictPolicy.SKIP, false))
         forwardingHandles.values.forEach { runCatching { it.close() } }
