@@ -38,6 +38,9 @@ const { useSettingsStore } = await import('@/stores/useSettingsStore')
 const { useMonitorStore, historyOf } = await import('@/stores/useMonitorStore')
 const { usePortTrafficStore } = await import('@/stores/usePortTrafficStore')
 const { useProcessPanelStore } = await import('@/stores/useProcessPanelStore')
+const { useTmuxStore } = await import('@/stores/useTmuxStore')
+const { useConnectionStore } = await import('@/stores/useConnectionStore')
+const i18n = (await import('@/i18n')).default
 const { DEFAULT_SETTINGS } = await import('@shared/constants')
 type SessionTab = ReturnType<typeof useSessionStore.getState>['tabs'][number]
 
@@ -78,6 +81,8 @@ beforeEach(() => {
   useMonitorStore.setState({ latest: {}, staticInfo: {}, state: {} })
   usePortTrafficStore.setState({ latest: {}, state: {}, error: {} })
   useProcessPanelStore.setState({ latest: {}, state: {}, error: {}, details: {} })
+  useTmuxStore.setState({ latest: {}, state: {}, error: {}, mouseTipDismissed: {} })
+  useConnectionStore.setState({ profiles: [PROFILE] as never })
   calls.length = 0
   invokeImpl = async () => ({ sessionId: 'sid-1' })
   wireSessionEvents()
@@ -471,5 +476,196 @@ describe('session:state → tab', () => {
     fire('session:state', { sessionId: 'sid-2', state: 'ready' })
     expect(useSessionStore.getState().tabs[0].state).toBe('connecting')
     expect(useSessionStore.getState().tabs[1].state).toBe('ready')
+  })
+})
+
+/**
+ * Tmux 两种新 kind 的生命周期（方案 §3 连接复用规则 + §5 标签模型）：
+ * - tmuxPanel：优先复用就绪终端的连接（面板成为其子面板），未命中才自建连接；
+ * - tmuxAttach：自带一条连接，就绪后不开 shell、直调 tmux:attach；
+ *   关闭标签 = detach（远端会话存活），只有面板的「关闭会话」才是 kill。
+ */
+describe('tmux 面板标签（tmuxPanel）', () => {
+  it('有就绪终端时复用其连接：不发 session:open，面板成为源终端的子面板', () => {
+    seedTab({ kind: 'terminal', state: 'ready' })
+    useSessionStore.getState().openTmuxPanelTab('p1')
+
+    const tabs = useSessionStore.getState().tabs
+    expect(tabs).toHaveLength(2)
+    expect(tabs[1]).toMatchObject({
+      kind: 'tmuxPanel',
+      sourceTabId: 'tab-1',
+      profileId: 'p1',
+      sessionId: 'sid-1',
+      termId: null,
+      sftpOpen: false,
+      monitorOpen: false
+    })
+    expect(useSessionStore.getState().activeTabId).toBe(tabs[1].id)
+    expect(calls.map(([channel]) => channel)).not.toContain('session:open')
+
+    // 同一 profile 的面板只开一个：再点入口只是回到已开的那个
+    useSessionStore.getState().openTmuxPanelTab('p1')
+    expect(useSessionStore.getState().tabs).toHaveLength(2)
+  })
+
+  it('没有就绪终端时自建连接：session:open，面板自有连接', async () => {
+    seedTab({ kind: 'terminal', state: 'connecting' }) // 未 ready，不作复用候选
+    useSessionStore.getState().openTmuxPanelTab('p1')
+
+    const panel = useSessionStore.getState().tabs[1]
+    expect(panel).toMatchObject({ kind: 'tmuxPanel', sessionId: null, state: 'connecting' })
+    expect(calls.map(([channel]) => channel)).toContain('session:open')
+    expect(calls.find(([channel]) => channel === 'session:open')?.[1]).toEqual(['p1'])
+
+    // session:open resolve 后认领 sessionId
+    await vi.waitFor(() =>
+      expect(useSessionStore.getState().tabs[1]).toMatchObject({ sessionId: 'sid-1', state: 'ready' })
+    )
+  })
+
+  it('关闭借用型面板只停采集，不动源终端的连接', async () => {
+    seedTab({ kind: 'terminal', state: 'ready' })
+    useSessionStore.getState().openTmuxPanelTab('p1')
+    const panelTabId = useSessionStore.getState().tabs[1].id
+
+    await useSessionStore.getState().closeTab(panelTabId)
+
+    expect(useSessionStore.getState().tabs.map((t) => t.id)).toEqual(['tab-1'])
+    expect(calls.map(([channel]) => channel)).toContain('tmux:stop')
+    expect(calls.map(([channel]) => channel)).not.toContain('session:close')
+  })
+
+  it('关闭自有连接的面板：采集与连接一起断开', async () => {
+    invokeImpl = async () => ({ sessionId: 'sid-panel' })
+    await useSessionStore.getState().openTmuxPanelTab('p1')
+    const panelTabId = useSessionStore.getState().tabs[0].id
+    await vi.waitFor(() =>
+      expect(useSessionStore.getState().tabs[0].sessionId).toBe('sid-panel')
+    )
+
+    await useSessionStore.getState().closeTab(panelTabId)
+
+    expect(useSessionStore.getState().tabs).toEqual([])
+    expect(calls.map(([channel]) => channel)).toContain('tmux:stop')
+    expect(calls.find(([channel]) => channel === 'session:close')?.[1]).toEqual(['sid-panel'])
+  })
+
+  it('关闭源终端时连带关闭其 tmux 面板（借用型级联）', async () => {
+    seedTab({ kind: 'terminal', state: 'ready' })
+    useSessionStore.getState().openTmuxPanelTab('p1')
+
+    await useSessionStore.getState().closeTab('tab-1')
+
+    expect(useSessionStore.getState().tabs).toEqual([])
+    expect(calls.map(([channel]) => channel)).toContain('tmux:stop')
+    expect(calls.map(([channel]) => channel)).toContain('session:close')
+  })
+})
+
+describe('tmux 附着标签（tmuxAttach）', () => {
+  function seedAttachTab(overrides: Record<string, unknown> = {}): string {
+    useSessionStore.setState({
+      tabs: [
+        {
+          id: 'tab-1',
+          kind: 'tmuxAttach',
+          profileId: 'p1',
+          targetId: '$3',
+          tmuxName: 'b',
+          sessionId: 'sid-1',
+          termId: null,
+          title: 'srv · tmux b',
+          state: 'ready',
+          sftpOpen: false,
+          monitorOpen: false,
+          shellEpoch: 0,
+          ...overrides
+        }
+      ],
+      activeTabId: 'tab-1'
+    })
+    return 'tab-1'
+  }
+
+  it('openTmuxAttachTab 内部 session:open 建自有连接，携带 targetId 与会话名', async () => {
+    invokeImpl = async () => ({ sessionId: 'sid-att' })
+    await useSessionStore.getState().openTmuxAttachTab('p1', '$3', 'b')
+
+    const attachTab = useSessionStore.getState().tabs[0]
+    expect(attachTab).toMatchObject({
+      kind: 'tmuxAttach',
+      profileId: 'p1',
+      targetId: '$3',
+      tmuxName: 'b',
+      sessionId: 'sid-att',
+      state: 'ready',
+      termId: null
+    })
+    expect(attachTab.title).toContain('tmux b')
+    expect(calls.find(([channel]) => channel === 'session:open')?.[1]).toEqual(['p1'])
+  })
+
+  it('关闭附着标签只断自有连接（detach 语义）：不发 tmux:stop，远端会话不受影响', async () => {
+    seedAttachTab({ termId: 'term-att' })
+    await useSessionStore.getState().closeTab('tab-1')
+
+    expect(useSessionStore.getState().tabs).toEqual([])
+    expect(calls.find(([channel]) => channel === 'session:close')?.[1]).toEqual(['sid-1'])
+    expect(calls.map(([channel]) => channel)).not.toContain('tmux:stop')
+    expect(calls.map(([channel]) => channel)).not.toContain('tmux:kill')
+  })
+
+  it('kill / detach 之后附着通道退出：标签进入已退出态并带 detach 文案', () => {
+    seedAttachTab({ termId: 'term-att' })
+    fire('term:exit', { termId: 'term-att', reason: 'closed' })
+
+    expect(tab()).toMatchObject({ state: 'closed', termId: null, error: i18n.t('tmux.detached') })
+  })
+
+  it('detach 后「重新附着」不走 session:reconnect：直接重开附着通道（递增 epoch）', async () => {
+    seedAttachTab({ termId: 'term-att' })
+    fire('term:exit', { termId: 'term-att', reason: 'closed' })
+
+    await useSessionStore.getState().reattachTmuxTab('tab-1')
+
+    expect(tab()).toMatchObject({ state: 'ready', termId: null, shellEpoch: 1 })
+    expect(calls.map(([channel]) => channel)).not.toContain('session:reconnect')
+    expect(calls.map(([channel]) => channel)).not.toContain('session:open')
+  })
+
+  it('连接已断（detach 标记作废）时「重新附着」先走正常重连', async () => {
+    seedAttachTab({ termId: null, everReady: true })
+    // 连接本身挂了（非 detach）：session:state closed 会让 detach 标记作废
+    fire('session:state', { sessionId: 'sid-1', state: 'closed', error: '连接已断开' })
+    expect(tab().state).toBe('closed')
+
+    await useSessionStore.getState().reattachTmuxTab('tab-1')
+
+    expect(calls.map(([channel]) => channel)).toContain('session:reconnect')
+    expect(tab()).toMatchObject({ state: 'ready', termId: null, shellEpoch: 1 })
+  })
+
+  it('duplicateTab 对附着标签 = 对同一目标再附着一次（新标签、新连接）', async () => {
+    invokeImpl = async () => ({ sessionId: 'sid-att-2' })
+    seedAttachTab()
+    await useSessionStore.getState().duplicateTab('tab-1', [PROFILE])
+
+    const tabs = useSessionStore.getState().tabs
+    expect(tabs).toHaveLength(2)
+    expect(tabs[1]).toMatchObject({
+      kind: 'tmuxAttach',
+      targetId: '$3',
+      tmuxName: 'b',
+      profileId: 'p1'
+    })
+    expect(tabs[1].id).not.toBe('tab-1')
+    expect(calls.filter(([channel]) => channel === 'session:open')).toHaveLength(1)
+  })
+
+  it('session:state ready 重连后附着标签凭 targetId 重附着（epoch 递增驱动 TerminalPane）', () => {
+    seedAttachTab({ termId: null, everReady: true })
+    fire('session:state', { sessionId: 'sid-1', state: 'ready' })
+    expect(tab().shellEpoch).toBe(1)
   })
 })

@@ -121,8 +121,9 @@ describe('SshConnection 的通道错误映射', () => {
   }
 
   // 反空转：调用点数量对不上就说明搜法失效（比如以后改成 this.client?.shell(）
-  it('五个开通道的调用点都还在（1 shell + 2 exec + 2 sftp）', () => {
+  it('六个开通道的调用点都还在（1 shell + 3 exec + 2 sftp）', () => {
     expect(found.map((f) => f.call).sort()).toEqual([
+      'client.exec(',
       'client.exec(',
       'client.exec(',
       'client.sftp(',

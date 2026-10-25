@@ -346,6 +346,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       usePortTrafficStore.getState().clear(tab.sessionId)
       await useProcessPanelStore.getState().stop(tab.sessionId).catch(() => {})
       useProcessPanelStore.getState().clear(tab.sessionId)
+      // 借用型 tmux 面板随源终端级联移除时走不到自己的 close 分支 ——
+      // 与 portTraffic / processPanel 同款，在这里一并停采集、清快照
+      await useTmuxStore.getState().stop(tab.sessionId).catch(() => {})
+      useTmuxStore.getState().clear(tab.sessionId)
       await ofs.invoke('session:close', tab.sessionId).catch(() => {})
     }
   },
