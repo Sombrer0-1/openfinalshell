@@ -12,6 +12,7 @@ import android.text.InputType
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.HapticFeedbackConstants
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -33,6 +34,51 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 internal data class TerminalViewport(val columns: Int, val rows: Int)
+
+/** How a scroll gesture reaches the host program. */
+internal enum class TerminalScrollMode {
+    /** The program enabled xterm mouse reporting (tmux `set -g mouse on`, vim `set mouse=a`); wheel bytes are sent to it. */
+    MOUSE_REPORT,
+
+    /** Alternate-screen program without mouse reporting (less, vim); arrow keys scroll it. */
+    CURSOR_KEYS,
+
+    /** Plain shell; only the local transcript moves. */
+    TRANSCRIPT
+}
+
+internal fun terminalScrollMode(mouseTracking: Boolean, alternateBuffer: Boolean): TerminalScrollMode = when {
+    mouseTracking -> TerminalScrollMode.MOUSE_REPORT
+    alternateBuffer -> TerminalScrollMode.CURSOR_KEYS
+    else -> TerminalScrollMode.TRANSCRIPT
+}
+
+internal data class WheelRowDelta(val rows: Int, val remainder: Float)
+
+/** Whole rows covered by a drag delta, carrying the sub-row remainder so slow drags still accumulate. */
+internal fun wheelRowsForDelta(deltaY: Float, remainder: Float, lineSpacing: Int): WheelRowDelta {
+    val spacing = lineSpacing.coerceAtLeast(1)
+    val total = remainder + deltaY
+    val rows = (total / spacing).toInt()
+    return WheelRowDelta(rows, total - rows * spacing)
+}
+
+/**
+ * Host rows to scroll for a touch drag. Touch scrolling is natural — the content follows the
+ * finger — so dragging up moves toward the newer rows, the reverse sign of the finger travel.
+ * A physical wheel keeps the mouse convention and does not go through here.
+ */
+internal fun dragScrollRowsForDelta(deltaY: Float, remainder: Float, lineSpacing: Int): WheelRowDelta {
+    val raw = wheelRowsForDelta(deltaY, remainder, lineSpacing)
+    return WheelRowDelta(-raw.rows, raw.remainder)
+}
+
+/** Natural-scrolling transcript position after a drag: the view follows the finger. */
+internal fun transcriptTopRowAfterDrag(startTopRow: Int, deltaY: Float, lineSpacing: Int, transcriptRows: Int): Int {
+    val spacing = lineSpacing.coerceAtLeast(1)
+    val rowDelta = (deltaY / spacing).roundToInt()
+    return (startTopRow - rowDelta).coerceIn(-transcriptRows, 0)
+}
 
 internal data class TerminalLayoutSignal(
     val columns: Int,
@@ -116,6 +162,8 @@ class SshTerminalView @JvmOverloads constructor(
     private var topRow = 0
     private var dragStartY = 0f
     private var startTopRow = 0
+    private var wheelAnchorY = 0f
+    private var wheelRemainder = 0f
     private var movedDuringGesture = false
     private var lastSignal: TerminalLayoutSignal? = null
     private var selectionStart: TerminalCell? = null
@@ -454,6 +502,8 @@ class SshTerminalView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 dragStartY = event.y
                 startTopRow = topRow
+                wheelAnchorY = event.y
+                wheelRemainder = 0f
                 movedDuringGesture = false
             }
             MotionEvent.ACTION_MOVE -> {
@@ -466,10 +516,20 @@ class SshTerminalView @JvmOverloads constructor(
                     invalidate()
                 } else {
                     val lineSpacing = scaledLineSpacing()
-                    val rowDelta = ((event.y - dragStartY) / lineSpacing).roundToInt()
-                    if (abs(event.y - dragStartY) > lineSpacing / 2f) {
-                        movedDuringGesture = true
-                        topRow = (startTopRow + rowDelta).coerceIn(-activeTranscriptRows(), 0)
+                    val terminal = controller?.emulator
+                    val mode = if (terminal != null) {
+                        synchronized(terminal) { terminalScrollMode(terminal.isMouseTrackingActive, terminal.isAlternateBufferActive) }
+                    } else {
+                        TerminalScrollMode.TRANSCRIPT
+                    }
+                    if (abs(event.y - dragStartY) > lineSpacing / 2f) movedDuringGesture = true
+                    if (terminal != null && mode != TerminalScrollMode.TRANSCRIPT) {
+                        val delta = dragScrollRowsForDelta(event.y - wheelAnchorY, wheelRemainder, lineSpacing)
+                        wheelAnchorY = event.y
+                        wheelRemainder = delta.remainder
+                        if (delta.rows != 0) scrollByRows(terminal, event, delta.rows)
+                    } else if (movedDuringGesture) {
+                        topRow = transcriptTopRowAfterDrag(startTopRow, event.y - dragStartY, lineSpacing, activeTranscriptRows())
                         invalidate()
                     }
                 }
@@ -492,6 +552,71 @@ class SshTerminalView @JvmOverloads constructor(
         requestFocus()
         context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
         return true
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        val terminal = controller?.emulator
+        if (terminal != null &&
+            event.isFromSource(InputDevice.SOURCE_MOUSE) &&
+            event.actionMasked == MotionEvent.ACTION_SCROLL
+        ) {
+            val up = event.getAxisValue(MotionEvent.AXIS_VSCROLL) > 0f
+            scrollByRows(terminal, event, if (up) -MOUSE_WHEEL_ROWS else MOUSE_WHEEL_ROWS)
+            return true
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
+    /**
+     * Scroll routing that matches what the host program expects: a mouse-tracking program (tmux
+     * `set -g mouse on`, vim `set mouse=a`) receives wheel reports, an alternate-screen program
+     * without mouse reporting gets cursor keys so less/vim scroll, and a plain shell scrolls only
+     * the local transcript.
+     */
+    private fun scrollByRows(terminal: TerminalEmulator, event: MotionEvent, rowsDown: Int) {
+        if (rowsDown == 0) return
+        val up = rowsDown < 0
+        val steps = abs(rowsDown).coerceAtMost(MAX_WHEEL_STEPS)
+        val mode = synchronized(terminal) {
+            terminalScrollMode(terminal.isMouseTrackingActive, terminal.isAlternateBufferActive)
+        }
+        if (mode == TerminalScrollMode.MOUSE_REPORT && topRow != 0) {
+            topRow = 0
+            invalidate()
+        }
+        repeat(steps) {
+            when (mode) {
+                TerminalScrollMode.MOUSE_REPORT -> synchronized(terminal) {
+                    val cell = screenCellAt(terminal, event.x, event.y)
+                    terminal.sendMouseEvent(
+                        if (up) TerminalEmulator.MOUSE_WHEELUP_BUTTON else TerminalEmulator.MOUSE_WHEELDOWN_BUTTON,
+                        cell.column + 1,
+                        cell.row + 1,
+                        true
+                    )
+                }
+                TerminalScrollMode.CURSOR_KEYS -> synchronized(terminal) {
+                    KeyHandler.getCode(
+                        if (up) KeyEvent.KEYCODE_DPAD_UP else KeyEvent.KEYCODE_DPAD_DOWN,
+                        0,
+                        terminal.isCursorKeysApplicationMode,
+                        terminal.isKeypadApplicationMode
+                    )?.let { dispatch(it) }
+                }
+                TerminalScrollMode.TRANSCRIPT -> {
+                    topRow = (topRow + if (up) -1 else 1).coerceIn(-activeTranscriptRows(), 0)
+                    invalidate()
+                }
+            }
+        }
+    }
+
+    /** Screen cell for mouse reports: live-screen coordinates, independent of the local scroll offset. */
+    private fun screenCellAt(terminal: TerminalEmulator, x: Float, y: Float): TerminalCell {
+        val fontWidth = renderer.getFontWidth().takeIf { it.isFinite() && it > 0f } ?: 1f
+        val column = (x / fontWidth).toInt().coerceIn(0, terminal.mColumns - 1)
+        val row = (y / scaledLineSpacing()).toInt().coerceIn(0, terminal.mRows - 1)
+        return TerminalCell(column, row)
     }
 
     private fun handleTerminalKey(event: KeyEvent): Boolean {
@@ -676,6 +801,8 @@ class SshTerminalView @JvmOverloads constructor(
         const val MIN_COLUMNS = 4
         const val MIN_ROWS = 4
         const val BLINK_MS = 500L
+        const val MOUSE_WHEEL_ROWS = 3
+        const val MAX_WHEEL_STEPS = 100
         val CTRL_META = KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON or KeyEvent.META_CTRL_RIGHT_ON
     }
 
