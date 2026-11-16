@@ -34,14 +34,14 @@ export function buildTmuxProbeFrame(seq: number): string {
  * 必须按 stderr 文本区分：no-server 是合法空态（SESSIONS 段为空正文），其余错误
  * 打出 ERROR 段，采集器把面板置为 failed 并透出前三行。
  *
- * 字段顺序把 session_name 放最后：名称含空格、中文、前导 `-` 时整行仍可按前四个
- * 定长字段可靠切分（tmux 对名称内的 \t / \n 做转义；解析侧另校验 id 形如 `$N`）。
+ * 用可打印的 `|` 分隔字段：C locale 下 tmux 会把格式中的制表符改成下划线。
+ * session_name 放最后，名称中的 `|` 归入第五列；解析侧另校验 id 形如 `$N`。
  */
 export function buildTmuxListFrame(seq: number): string {
   return [
     `echo "${SENTINEL.begin(seq)}"`,
     `echo "${SENTINEL.section('SESSIONS')}"`,
-    "out=$(tmux list-sessions -F '#{session_id}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{session_name}' 2>&1)",
+    "out=$(tmux list-sessions -F '#{session_id}|#{session_windows}|#{session_attached}|#{session_created}|#{session_name}' 2>&1)",
     'rc=$?',
     'if [ "$rc" -eq 0 ]; then',
     '  printf \'%s\\n\' "$out"',

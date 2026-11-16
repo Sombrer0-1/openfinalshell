@@ -16,8 +16,6 @@ import {
   parseMeminfo,
   parseNetDev,
   parseProcStat,
-  parsePsAux,
-  parsePsTop,
   parseSockstat,
   parseStaticInfo,
   parseTcpStates,
@@ -68,8 +66,6 @@ export class MonitorCollector {
   private failures = 0
   private intervalMs = MONITOR_DEFAULT_INTERVAL_MS
   private hasTimeoutCmd = false
-  /** procps 的 `-eo --sort` 是否可用；探测前按可用处理（等于今天的既有行为） */
-  private hasPsSort = true
   /**
    * 最近一次帧首哨兵回显的往返毫秒。帧首那句 `echo BEGIN` 服务器收到即回显，
    * 写入→首见 BEGIN ≈ 一个 SSH 通道往返 —— 不必像 pixshell 那样反复对 22 端口
@@ -139,8 +135,6 @@ export class MonitorCollector {
       return null
     }
     this.hasTimeoutCmd = (sections.get('HASTIMEOUT') ?? '').includes('yes')
-    // 段缺失（不该发生）时保持 procps 路径 —— 与探测机制上线前的行为一致
-    this.hasPsSort = (sections.get('HASPSSORT') ?? 'yes').includes('yes')
     return parseStaticInfo({
       uname,
       hostname: sections.get('HOSTNAME') ?? '',
@@ -212,10 +206,9 @@ export class MonitorCollector {
     const seq = this.seq
     const withDf = seq - this.lastDfTick >= MONITOR_DF_EVERY_N_TICKS
     if (withDf) this.lastDfTick = seq
-    const withPs = withDf // 与 df 同 tick，摊平重命令开销
 
     void this.request(
-      buildFrame(seq, { withDf, withPs, hasTimeout: this.hasTimeoutCmd, hasPsSort: this.hasPsSort }),
+      buildFrame(seq, { withDf, hasTimeout: this.hasTimeoutCmd }),
       seq
     ).then((body) => {
       if (body === null) {
@@ -256,7 +249,6 @@ export class MonitorCollector {
 
     const dfText = sections.get('DF')
     if (dfText !== undefined) this.lastDiskFs = parseDf(dfText)
-    const psText = sections.get('PS')
     const tcpStText = sections.get('TCPST')
 
     return {
@@ -300,7 +292,6 @@ export class MonitorCollector {
             : 0
         }
       }),
-      topProcs: psText ? (this.hasPsSort ? parsePsTop(psText) : parsePsAux(psText)) : undefined,
       directLatencyMs: this.lastDirectLatencyMs ?? undefined,
       connectionLatencyMs: this.lastConnectionLatencyMs ?? undefined
     }

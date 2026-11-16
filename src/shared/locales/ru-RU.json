@@ -124,8 +124,6 @@
     "memory": "Память",
     "network": "Сеть",
     "disk": "Диск",
-    "topProcs": "Топ процессов",
-    "procName": "Процесс",
     "latency": "Задержка",
     "directLatency": "Прямой IP",
     "connectionLatency": "Текущее подключение",
@@ -163,7 +161,7 @@
   },
   "processPanel": {
     "tab": "Processes",
-    "open": "View all processes",
+    "open": "Посмотреть процессы",
     "title": "Process manager",
     "updated": "Updated {{time}}",
     "total": "{{count}} processes",

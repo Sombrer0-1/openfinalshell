@@ -124,8 +124,6 @@
     "memory": "메모리",
     "network": "네트워크",
     "disk": "디스크",
-    "topProcs": "상위 프로세스",
-    "procName": "프로세스",
     "latency": "지연 시간",
     "directLatency": "직접 IP",
     "connectionLatency": "현재 연결",
@@ -163,7 +161,7 @@
   },
   "processPanel": {
     "tab": "Processes",
-    "open": "View all processes",
+    "open": "프로세스 보기",
     "title": "Process manager",
     "updated": "Updated {{time}}",
     "total": "{{count}} processes",

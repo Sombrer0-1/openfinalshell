@@ -1223,6 +1223,7 @@ async function main() {
     const n1 = await sweepTips('终端悬浮工具条', 'hoverTools', [
       '关闭文件管理',
       '打开服务器监控',
+      'Tmux 会话',
       '查找',
       // 命令历史那颗按钮就长在这条工具条上，也就长在原生按钮区正下方 ——
       // 不列进来这一轮就不会 hover 它，它的气泡被系统按钮切掉也没人知道
@@ -1233,9 +1234,9 @@ async function main() {
 
     // 查找条贴同一条边，且 z-index 10 会盖住工具条的 8 —— 必须排在工具条之后扫
     const searchOpen = await evaluate(`
-      const btns = [...document.querySelectorAll('[class*=hoverTools] button')]
-      if (btns.length < 3) return false
-      btns[2].click()
+      const button = document.querySelector('[class*=hoverTools] button[aria-label="查找"]')
+      if (!button) return false
+      button.click()
       await new Promise((r) => setTimeout(r, 600))
       return Boolean([...document.querySelectorAll('input')].find((x) => String(x.placeholder || '').startsWith('查找内容')))
     `)

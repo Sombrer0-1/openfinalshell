@@ -330,11 +330,8 @@ suite('真实服务器：监控采集', () => {
       expect(Math.abs(rootFs!.totalKb - dfTotal) / dfTotal).toBeLessThan(0.02)
     }
 
-    // 磁盘 IO 与进程 Top 属 best-effort，仅观测
+    // 磁盘 IO 仅观测
     observed.monitorDiskIo = snap.diskIo.map((d) => d.dev).join(', ') || '(none)'
-    observed.monitorTopProc = withDf.topProcs?.[0]
-      ? `${withDf.topProcs[0].name} ${withDf.topProcs[0].cpuPct}%`
-      : '(none)'
   }, 120000)
 })
 

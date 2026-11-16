@@ -164,7 +164,7 @@ export function createMockOfs(): OfsApi {
   })
 
   /** sessionId → 该会话的 profile 描述，用于假终端提示符 */
-  const sessions = new Map<string, { label: string }>()
+  const sessions = new Map<string, { label: string; profileId: string }>()
   const terms = new Map<string, { sessionId: string; line: string }>()
 
   // --- 假 SFTP 目录树（mockDirs/mockFiles 只装运行时新建的，避免与固定列表重复） ---
@@ -243,14 +243,15 @@ export function createMockOfs(): OfsApi {
   const portTrafficTimers = new Map<string, ReturnType<typeof setInterval>>()
   const processPanelTimers = new Map<string, ReturnType<typeof setInterval>>()
   const tmuxTimers = new Map<string, ReturnType<typeof setInterval>>()
-  /** 每条 SSH 会话一份假 tmux server 状态（面板与附着标签共用同一份列表） */
+  /** 同一配置的 SSH 连接共享远端 tmux 状态；停止采集不影响远端会话。 */
   const tmuxMock = new Map<string, { sessions: TmuxSessionInfo[]; mouseOn: boolean; nextId: number }>()
 
-  function startMockTmux(sessionId: string): void {
-    if (tmuxTimers.has(sessionId)) return
-    if (!tmuxMock.has(sessionId)) {
+  function mockTmuxFor(sessionId: string) {
+    const profileId = sessions.get(sessionId)?.profileId
+    if (!profileId) throw new Error(i18n.t('err.ssh.sessionNotFound'))
+    if (!tmuxMock.has(profileId)) {
       const nowSec = Math.floor(Date.now() / 1000)
-      tmuxMock.set(sessionId, {
+      tmuxMock.set(profileId, {
         // mouse 默认 off：让提示条在浏览器里一打开就能看到
         sessions: [
           { id: '$0', name: 'main', windows: 3, attached: 1, created: nowSec - 7200 },
@@ -260,8 +261,13 @@ export function createMockOfs(): OfsApi {
         nextId: 2
       })
     }
+    return tmuxMock.get(profileId)!
+  }
+
+  function startMockTmux(sessionId: string): void {
+    if (tmuxTimers.has(sessionId)) return
+    const st = mockTmuxFor(sessionId)
     const push = (): void => {
-      const st = tmuxMock.get(sessionId)!
       emit('tmux:sessions', {
         sessionId,
         ts: Date.now(),
@@ -367,14 +373,6 @@ export function createMockOfs(): OfsApi {
           diskIo: [
             { dev: 'sda', readBps: Math.round(wave(10, 10) * 100000), writeBps: Math.round(wave(6, 6) * 80000) }
           ],
-          topProcs:
-            tick % 5 === 1
-              ? [
-                  { pid: 1234, name: 'node', cpuPct: Number(wave(30, 15).toFixed(1)), memPct: 3.1 },
-                  { pid: 2345, name: 'nginx', cpuPct: Number(wave(8, 6).toFixed(1)), memPct: 1.5 },
-                  { pid: 3456, name: 'sshd', cpuPct: 1.0, memPct: 0.2 }
-                ]
-              : undefined,
           // conns 每 tick 都有（sockstat 是 O(1)），明细跟 df 同档低频
           conns: {
             socketsUsed: 330 + Math.round(wave(20, 18)),
@@ -654,7 +652,7 @@ export function createMockOfs(): OfsApi {
       const p = profiles.find((x) => x.id === (profileId as unknown as string))
       if (!p) throw new Error(i18n.t('err.ssh.profileNotFound'))
       const sessionId = crypto.randomUUID()
-      sessions.set(sessionId, { label: `${p.username}@${p.host}` })
+      sessions.set(sessionId, { label: `${p.username}@${p.host}`, profileId: p.id })
       setTimeout(() => emit('session:state', { sessionId, state: 'ready' }), 150)
       return { sessionId }
     },
@@ -669,7 +667,7 @@ export function createMockOfs(): OfsApi {
       const p = profiles.find((x) => x.id === profileId)
       if (!p) throw new Error(i18n.t('err.rdp.profileInvalid'))
       const sessionId = crypto.randomUUID()
-      sessions.set(sessionId, { label: `${p.username}@${p.host}` })
+      sessions.set(sessionId, { label: `${p.username}@${p.host}`, profileId: p.id })
       setTimeout(() => {
         emit('rdp:state', { sessionId, state: 'ready' })
         const pixels = new Uint8Array(display.width * display.height * 4)
@@ -1114,14 +1112,11 @@ export function createMockOfs(): OfsApi {
       const timer = tmuxTimers.get(id)
       if (timer) clearInterval(timer)
       tmuxTimers.delete(id)
-      tmuxMock.delete(id)
       emit('tmux:state', { sessionId: id, state: 'stopped' })
     },
     'tmux:new': (arg: never) => {
       const { sessionId, name } = arg as unknown as { sessionId: string; name: string }
-      const st = tmuxMock.get(sessionId)
-      // 面板没开过就调 new：真机上是 execOnce 直接跑命令；mock 里给同款错误文案即可
-      if (!st) throw new Error(i18n.t('err.net.tmuxNewFailed', { reason: 'mock not started' }))
+      const st = mockTmuxFor(sessionId)
       if (st.sessions.some((s) => s.name === name)) {
         throw new Error(i18n.t('err.net.duplicateSession', { name }))
       }
@@ -1131,16 +1126,14 @@ export function createMockOfs(): OfsApi {
     },
     'tmux:kill': (arg: never) => {
       const { sessionId, targetId } = arg as unknown as { sessionId: string; targetId: string }
-      const st = tmuxMock.get(sessionId)
-      if (!st) throw new Error(i18n.t('err.net.tmuxKillFailed', { reason: 'mock not started' }))
+      const st = mockTmuxFor(sessionId)
       const idx = st.sessions.findIndex((s) => s.id === targetId)
       if (idx < 0) throw new Error(i18n.t('err.net.sessionGone'))
       st.sessions.splice(idx, 1)
     },
     'tmux:setMouse': (arg: never) => {
       const { sessionId, enabled } = arg as unknown as { sessionId: string; enabled: boolean }
-      const st = tmuxMock.get(sessionId)
-      if (st) st.mouseOn = enabled
+      mockTmuxFor(sessionId).mouseOn = enabled
     },
     'tmux:attach': (arg: never) => {
       const { sessionId, targetId, cols, rows } = arg as unknown as {
@@ -1149,10 +1142,10 @@ export function createMockOfs(): OfsApi {
         cols: number
         rows: number
       }
-      const st = tmuxMock.get(sessionId)
+      const st = mockTmuxFor(sessionId)
       // 同款 has-session 前置检查：目标不在 → sessionGone
-      const row = st?.sessions.find((s) => s.id === targetId)
-      if (!st || !row) throw new Error(i18n.t('err.net.sessionGone'))
+      const row = st.sessions.find((s) => s.id === targetId)
+      if (!row) throw new Error(i18n.t('err.net.sessionGone'))
       row.attached += 1
       const termId = crypto.randomUUID()
       terms.set(termId, { sessionId, line: '' })

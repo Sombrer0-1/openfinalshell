@@ -26,7 +26,8 @@
   box-shadow: var(--ofs-shadow-panel);
 }
 
-.networkCard {
+.clickableCard {
+  position: relative;
   appearance: none;
   width: 100%;
   font: inherit;
@@ -34,9 +35,14 @@
   text-align: left;
   cursor: pointer;
 }
-.networkCard:hover {
+.clickableCard:hover {
   border-color: var(--ofs-accent);
   background: var(--ofs-bg-hover);
+}
+.clickableCard:focus-visible,
+.clickableCard:has(.cardToggle:focus-visible) {
+  outline: 2px solid var(--ofs-accent);
+  outline-offset: 2px;
 }
 .cardActionHint {
   display: inline-flex;
@@ -45,7 +51,8 @@
   color: var(--ofs-text-3);
   font-size: 10px;
 }
-.networkCard:hover .cardActionHint { color: var(--ofs-text-1); }
+.cardActionHint svg { flex: none; }
+.clickableCard:hover .cardActionHint { color: var(--ofs-text-1); }
 
 .cardHead {
   display: flex;
@@ -65,17 +72,16 @@
   padding: 0;
   border: 0;
   background: transparent;
-  cursor: pointer;
-  color: var(--ofs-text-3);
-  display: flex;
-  align-items: center;
+  cursor: inherit;
 }
-.cardToggle:hover {
-  color: var(--ofs-text-1);
+/* 让按钮覆盖整张卡片，同时保留占用条各自的无障碍语义。 */
+.cardToggle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
 }
 .cardToggle:focus-visible {
-  outline: 2px solid var(--ofs-accent);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .bigNumber {
@@ -194,25 +200,6 @@
   color: var(--ofs-text-3);
   font-size: 12px;
   font-weight: 400;
-}
-
-.procRow {
-  display: grid;
-  grid-template-columns: 1fr 44px 44px;
-  gap: 4px;
-  font-size: var(--ofs-text-caption);
-  line-height: 1.6;
-  font-variant-numeric: tabular-nums;
-}
-.procName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ofs-text-1);
-}
-.procNum {
-  text-align: right;
-  color: var(--ofs-text-2);
 }
 
 .stateBox {

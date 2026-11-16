@@ -120,8 +120,6 @@
     "memory": "内存",
     "network": "网络",
     "disk": "磁盘",
-    "topProcs": "进程占用 Top",
-    "procName": "进程",
     "latency": "延迟",
     "directLatency": "直连 IP",
     "connectionLatency": "实际连接",
@@ -159,7 +157,7 @@
   },
   "processPanel": {
     "tab": "进程",
-    "open": "查看全部进程",
+    "open": "查看进程信息",
     "title": "进程管理",
     "updated": "更新于 {{time}}",
     "total": "{{count}} 个进程",

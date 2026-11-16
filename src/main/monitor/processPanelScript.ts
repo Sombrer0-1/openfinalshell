@@ -35,7 +35,7 @@ export function buildProcessProbeFrame(seq: number): string {
 /** 常规列表帧。hasPsSort=false 时用 POSIX 管线，兼容 BusyBox。 */
 export function buildProcessListFrame(seq: number, hasPsSort: boolean): string {
   // procps：pid user rss(KB) pcpu args… —— args 吸收剩余列，解析侧 slice(4)。
-  // BusyBox：完整 aux，解析侧走 parseProcessAux。
+  // BusyBox：列随构建配置变化，parseProcessAux 按表头识别。
   const listCmd = hasPsSort
     ? `ps -eo pid,user,rss,pcpu,args --sort=-pcpu 2>/dev/null | head -n ${LIST_HEAD_LINES}`
     : `ps aux 2>/dev/null | head -n ${LIST_HEAD_LINES}`

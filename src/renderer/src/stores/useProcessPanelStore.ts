@@ -18,7 +18,7 @@ function detailKey(sessionId: SessionId, pid: number): string {
   return `${sessionId}:${pid}`
 }
 
-/** 进程快照只在对应工具标签打开期间存在，不与右侧监控的 topProcs 混用。 */
+/** 进程快照只在对应工具标签打开期间存在。 */
 export const useProcessPanelStore = create<ProcessPanelStore>((set, get) => ({
   latest: {},
   state: {},

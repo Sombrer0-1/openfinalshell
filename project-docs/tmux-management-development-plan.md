@@ -53,7 +53,7 @@ tmux -V
 **列表帧**（每 2 秒）。退出码 1 不等于「没有 server」，必须按 stderr 区分：no-server 是合法空态，其余错误进 failed：
 
 ```sh
-out=$(tmux list-sessions -F '#{session_id}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{session_name}' 2>&1)
+out=$(tmux list-sessions -F '#{session_id}|#{session_windows}|#{session_attached}|#{session_created}|#{session_name}' 2>&1)
 rc=$?
 if [ "$rc" -eq 0 ]; then
   printf '%s\n' "$out"
@@ -66,7 +66,7 @@ fi
 tmux show-options -gv mouse 2>/dev/null
 ```
 
-`SECTION:ERROR` 段出现时，采集器把面板置为 failed 并透出前三行错误；无会话与无 server 均输出空正文，面板显示空列表。字段顺序把 `session_name` 放最后：名称含空格、中文、前导 `-` 时整行仍可按前四个定长字段可靠切分；tmux 对名称内的 `\t`/`\n` 做转义，解析时校验 `session_id` 匹配 `^\$\d+$`，不匹配的行丢弃。
+`SECTION:ERROR` 段出现时，采集器把面板置为 failed 并透出前三行错误；无会话与无 server 均输出空正文，面板显示空列表。使用可打印的 `|` 分隔字段，避免 C locale 下 tmux 将制表符改成下划线。`session_name` 放最后，名称中的 `|` 归入第五列；解析时校验 `session_id` 匹配 `^\$\d+$`，不匹配的行丢弃。
 
 **新建**（execOnce）：
 

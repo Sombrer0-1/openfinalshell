@@ -124,8 +124,6 @@
     "memory": "Speicher",
     "network": "Netzwerk",
     "disk": "Datenträger",
-    "topProcs": "Top-Prozesse",
-    "procName": "Prozess",
     "latency": "Latenz",
     "directLatency": "Direkte IP",
     "connectionLatency": "Aktive Verbindung",
@@ -163,7 +161,7 @@
   },
   "processPanel": {
     "tab": "Processes",
-    "open": "View all processes",
+    "open": "Prozesse anzeigen",
     "title": "Process manager",
     "updated": "Updated {{time}}",
     "total": "{{count}} processes",

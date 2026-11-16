@@ -25,16 +25,16 @@ export interface TmuxCallbacks {
 }
 
 /**
- * 解析 `tmux list-sessions -F 'id\twindows\tattached\tcreated\tname'` 的正文。
+ * 解析 `tmux list-sessions -F 'id|windows|attached|created|name'` 的正文。
  * 远端输出不可信：id 不合 `$N` 形状、数值列非法的行丢弃；名称吸收第 4 个
- * tab 之后的所有内容（tmux 对名称内的 \t / \n 做转义，这里按原始 tab 切前四列）。
+ * 分隔符之后的所有内容，保留名称中的 `|`。
  */
 export function parseTmuxSessions(text: string): TmuxSessionInfo[] {
   const out: TmuxSessionInfo[] = []
   for (const raw of text.split('\n')) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
     if (!line) continue
-    const parts = line.split('\t')
+    const parts = line.split('|')
     if (parts.length < 5) continue
     const [id, windows, attached, created] = parts
     if (!TMUX_SESSION_ID_RE.test(id)) continue
@@ -46,7 +46,7 @@ export function parseTmuxSessions(text: string): TmuxSessionInfo[] {
     if (!Number.isInteger(cre) || cre < 0) continue
     out.push({
       id,
-      name: parts.slice(4).join('\t').slice(0, 256),
+      name: parts.slice(4).join('|').slice(0, 256),
       windows: win,
       attached: att,
       created: cre
@@ -128,7 +128,13 @@ export class TmuxCollector {
     const gen = ++this.openGen
     this.pause()
     this.setState('collecting')
-    const channel = await this.openChannel()
+    let channel: ClientChannel
+    try {
+      channel = await this.openChannel()
+    } catch (err) {
+      if (this.stopped || gen !== this.openGen) return
+      throw err
+    }
     // open() 在途守卫：等待通道期间被 stop()，就地关掉，不再注册
     if (this.stopped || gen !== this.openGen) {
       channel.close()

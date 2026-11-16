@@ -13,6 +13,13 @@ import {
 } from '../../src/main/monitor/processPanelScript'
 
 describe('进程面板解析', () => {
+  it('BusyBox 简化格式保留 PID、用户和完整命令', () => {
+    expect(parseProcessAux('PID USER COMMAND\n42 root /bin/sh -c sleep 30\n')).toEqual([
+      { pid: 42, user: 'root', cpu: 0, memBytes: 0, name: 'sh', cmdline: '/bin/sh -c sleep 30', location: '' }
+    ])
+    expect(parseProcessAux('PID USER VSZ STAT COMMAND\n43 app 1200 S node server.js\n'))
+      .toEqual([expect.objectContaining({ pid: 43, user: 'app', cpu: 0, memBytes: 0, cmdline: 'node server.js' })])
+  })
   it('从 cmdline 抽出短名，内核线程去掉方括号', () => {
     expect(processShortName('/usr/bin/python3 app.py')).toBe('python3')
     expect(processShortName('[kworker/19:0-events]')).toBe('kworker/19:0-events')

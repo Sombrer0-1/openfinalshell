@@ -367,10 +367,10 @@ const FAKE_SOCKSTAT = [
 const FAKE_TCP_STATES = ['0A 9', '01 31', '06 3', '08 1'].join('\n')
 
 const FAKE_PS = [
-  '    PID %CPU %MEM COMMAND',
-  '   1234 45.2  3.1 node',
-  '   2345 12.0  1.5 nginx',
-  '   3456  1.0  0.2 sshd'
+  '    PID USER      RSS %CPU COMMAND',
+  '   1234 test    40960 45.2 /usr/bin/node server.js',
+  '   2345 www-data 8192 12.0 nginx: worker process',
+  '   3456 root     4096  1.0 /usr/sbin/sshd'
 ].join('\n')
 
 const FAKE_OS_RELEASE = [
@@ -399,7 +399,7 @@ function runFakeCommand(cmd) {
   // HASPSSORT 能力探测：fixture 模拟的是 Ubuntu（procps 在），必须答 yes ——
   // 注意要排在 /^ps\b/ 兜底之前，否则探测段会收到 FAKE_PS、被当成"没有 procps"
   if (c.includes('--sort=-pcpu >/dev/null')) return 'yes\n'
-  if (/^ps\b/.test(c) || c.includes('| head -n 9')) return `${FAKE_PS}\n`
+  if (c.includes('ps -eo pid,user,rss,pcpu,args')) return `${FAKE_PS}\n`
   if (/^uname/.test(c)) return 'Linux 5.15.0-91-generic x86_64\n'
   if (/^hostname/.test(c) || c.includes('kernel/hostname')) return 'fixture-host\n'
   if (/^nproc/.test(c) || c.includes('^processor')) return '2\n'

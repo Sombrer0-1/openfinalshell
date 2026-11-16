@@ -20,7 +20,6 @@ export const SECTIONS = [
   'DISKIO',
   'SOCK',
   'DF',
-  'PS',
   'TCPST'
 ] as const
 export type SectionName = (typeof SECTIONS)[number]
@@ -41,21 +40,14 @@ const TCP_STATE_AWK =
 
 /**
  * 一个采集帧：哨兵行界定输出范围，防 bashrc 输出/欢迎语污染解析。
- * withDf / withPs 按 tick 轮换，避免每 2s 都跑较重的命令。
+ * 磁盘容量和 TCP 状态按固定间隔采集，避免每帧都跑较重的命令。
  * df 用 `timeout 3` 兜住卡死的 NFS 挂载点（探测不到 timeout 时裸跑，靠帧超时兜底）。
  */
 export function buildFrame(
   seq: number,
-  opts: { withDf: boolean; withPs: boolean; hasTimeout: boolean; hasPsSort: boolean }
+  opts: { withDf: boolean; hasTimeout: boolean }
 ): string {
   const dfCmd = opts.hasTimeout ? 'timeout 3 df -kP' : 'df -kP'
-  // `-eo --sort` 是 procps 专属：BusyBox（Alpine/OpenWrt）的 ps 会直接报错，而 stderr
-  // 被吞掉 —— 结果是 PS 段永远为空、进程卡片静默消失。静态帧探测过一次（HASPSSORT），
-  // 探不到就退到 POSIX 管线：BusyBox 的 sed/sort/head 全套可用。排序列 3 在完整 aux
-  // 输出里是 %CPU；BusyBox 的 aux 输出没有该列（解析侧按格式嗅探，见 parsePsAux）。
-  const psCmd = opts.hasPsSort
-    ? 'ps -eo pid,pcpu,pmem,comm --sort=-pcpu 2>/dev/null | head -n 9'
-    : 'ps aux 2>/dev/null | sed 1d | sort -rnk3 2>/dev/null | head -n 8'
   const lines = [
     `echo "${SENTINEL.begin(seq)}"`,
     `echo "${SENTINEL.section('STAT')}"`,
@@ -84,9 +76,6 @@ export function buildFrame(
       `${opts.hasTimeout ? 'timeout 3 ' : ''}${TCP_STATE_AWK} 2>/dev/null`
     )
   }
-  if (opts.withPs) {
-    lines.push(`echo "${SENTINEL.section('PS')}"`, psCmd)
-  }
   lines.push(`echo "${SENTINEL.end(seq)}"`)
   return `${lines.join('\n')}\n`
 }
@@ -107,10 +96,6 @@ export function buildStaticFrame(): string {
     'ip -o -4 addr 2>/dev/null || ifconfig 2>/dev/null',
     `echo "${SENTINEL.section('HASTIMEOUT')}"`,
     'command -v timeout >/dev/null 2>&1 && echo yes || echo no',
-    // 探测 procps 的 ps：`command -v ps` 不够 —— BusyBox 也有 ps，得让真实选项集跑一遍。
-    // 段名只能是大写字母（见文件头警告），所以是 HASPSSORT 不是 HAS_PS_SORT。
-    `echo "${SENTINEL.section('HASPSSORT')}"`,
-    'ps -eo pid,pcpu,pmem,comm --sort=-pcpu >/dev/null 2>&1 && echo yes || echo no',
     `echo "${SENTINEL.end(0)}"`
   ].join('\n') + '\n'
 }

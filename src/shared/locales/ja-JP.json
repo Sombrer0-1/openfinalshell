@@ -124,8 +124,6 @@
     "memory": "メモリ",
     "network": "ネットワーク",
     "disk": "ディスク",
-    "topProcs": "トッププロセス",
-    "procName": "プロセス",
     "latency": "レイテンシ",
     "directLatency": "IP 直結",
     "connectionLatency": "現在の接続",
@@ -163,7 +161,7 @@
   },
   "processPanel": {
     "tab": "Processes",
-    "open": "View all processes",
+    "open": "プロセスを表示",
     "title": "Process manager",
     "updated": "Updated {{time}}",
     "total": "{{count}} processes",

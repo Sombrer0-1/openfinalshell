@@ -9,7 +9,7 @@ import { TerminalPane } from '@/features/terminal/TerminalPane'
 import { onShellCommand } from '@/features/terminal/commandEvents'
 import { useHistoryStore } from '@/stores/useHistoryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
-import type { SessionTab } from '@/stores/useSessionStore'
+import { useSessionStore, type SessionTab } from '@/stores/useSessionStore'
 import { fakeOfs } from './fakeOfs'
 
 /**
@@ -133,6 +133,7 @@ async function mountPane(): Promise<Rig> {
 
 beforeEach(() => {
   fakeOfs.reset()
+  useSessionStore.setState({ tabs: [{ ...tab }], activeTabId: tab.id })
   fakeOfs.handle('term:open', () => ({ termId: `term-${Math.random().toString(36).slice(2)}` }))
   fakeOfs.handle('term:close', () => undefined)
   fakeOfs.handle('term:ready', () => undefined)

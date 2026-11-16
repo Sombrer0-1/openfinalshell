@@ -6,7 +6,7 @@ import type { Terminal } from '@xterm/xterm'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { TerminalPane } from '@/features/terminal/TerminalPane'
 import { useSettingsStore } from '@/stores/useSettingsStore'
-import type { SessionTab } from '@/stores/useSessionStore'
+import { useSessionStore, type SessionTab } from '@/stores/useSessionStore'
 import { getTerm, trackerFor } from '@/features/terminal/termRegistry'
 import i18n from '@/i18n'
 import { deferred, fakeOfs } from './fakeOfs'
@@ -49,6 +49,7 @@ beforeEach(() => {
   fakeOfs.handle('term:close', () => undefined)
   fakeOfs.handle('term:ready', () => { expect(getTerm('paste-term')).toBe(rig.term) })
   useSettingsStore.setState({ settings: structuredClone(DEFAULT_SETTINGS) })
+  useSessionStore.setState({ tabs: [{ ...tab }], activeTabId: tab.id })
   readText.mockClear()
   writeText.mockClear()
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText, writeText } })

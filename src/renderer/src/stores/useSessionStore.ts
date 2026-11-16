@@ -309,11 +309,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     */
     set((s) => {
       const tabs = s.tabs.filter((t) => !closingIds.has(t.id))
+      const source = tab?.kind === 'processPanel' ? tabs.find((t) => t.id === tab.sourceTabId) : undefined
       const activeTabId =
         s.activeTabId && closingIds.has(s.activeTabId)
-          ? tabs.length > 0
-            ? tabs[tabs.length - 1].id
-            : null
+          ? (source ?? tabs.at(-1))?.id ?? null
           : s.activeTabId
       return { tabs, activeTabId }
     })
@@ -390,7 +389,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     if (
       tab.kind === 'portTraffic' ||
       tab.kind === 'processPanel' ||
-      tab.kind === 'tmuxPanel'
+      (tab.kind === 'tmuxPanel' && !!tab.sourceTabId)
     ) {
       if (tab.sourceTabId) await get().reconnectTab(tab.sourceTabId)
       return
@@ -453,6 +452,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   claimSession: (tabId, sessionId) => {
     const pending = unclaimedState.get(sessionId)
     unclaimedState.delete(sessionId)
+    if (!get().tabs.some((tab) => tab.id === tabId)) {
+      void ofs.invoke('session:close', sessionId).catch(() => {})
+      return
+    }
     // session:open 只在成功后 resolve，所以至少已经 ready 过；
     // 但开连到 resolve 之间可能又掉线了，那就用真实的最新状态，不能一律硬写 ready
     const state = pending?.state ?? 'ready'
@@ -645,12 +648,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   noteTmuxAttachFailed: (id) => {
-    tmuxDetachedTabs.add(id)
+    const tab = get().tabs.find((candidate) => candidate.id === id)
+    if (tab?.kind === 'tmuxAttach' && tab.state === 'ready') tmuxDetachedTabs.add(id)
   },
 
   reattachTmuxTab: async (id) => {
     const tab = get().tabs.find((t) => t.id === id)
     if (!tab || tab.kind !== 'tmuxAttach' || !tab.targetId) return
+    if (tab.state === 'ready' && tab.termId) return
     const detachedAlive = tmuxDetachedTabs.has(id)
     tmuxDetachedTabs.delete(id)
     // detach 后连接仍在 → 不重连，直接重开附着通道；连接已断 → 先走正常重连

@@ -10,7 +10,7 @@ import { TerminalPane } from '@/features/terminal/TerminalPane'
 import { useSessionStore, wireSessionEvents, type SessionTab } from '@/stores/useSessionStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { getTerm } from '@/features/terminal/termRegistry'
-import { fakeOfs } from './fakeOfs'
+import { deferred, fakeOfs } from './fakeOfs'
 
 /**
  * TerminalPane 的 tmux 附着模式：
@@ -92,6 +92,50 @@ beforeEach(() => {
 afterEach(() => cleanup())
 
 describe('TerminalPane 附着模式', () => {
+  it('断线状态先到、附着失败后到时仍可重连', async () => {
+    const pending = deferred<{ termId: string }>()
+    fakeOfs.handle('tmux:attach', () => pending.promise)
+    fakeOfs.handle('session:reconnect', () => undefined)
+    seedTab({ everReady: true })
+    mount()
+    await waitFor(() => expect(channels()).toContain('tmux:attach'))
+    await act(async () => {
+      fakeOfs.emit('session:state', { sessionId: 'att-sess', state: 'closed', error: 'network lost' })
+      pending.reject(new Error('late attach failure'))
+    })
+    expect(useSessionStore.getState().tabs[0]).toMatchObject({ state: 'closed', error: 'network lost' })
+    fakeOfs.handle('tmux:attach', () => ({ termId: 'retry-term' }))
+    await act(async () => { await useSessionStore.getState().reattachTmuxTab('att-tab') })
+    expect(channels()).toContain('session:reconnect')
+    await waitFor(() => expect(useSessionStore.getState().tabs[0].termId).toBe('retry-term'))
+  })
+
+  it('连接恢复后不等待旧附着请求完成，丢弃旧请求返回的通道', async () => {
+    const pending = deferred<{ termId: string }>()
+    fakeOfs.handle('tmux:attach', () => pending.promise)
+    seedTab({ everReady: true })
+    mount()
+    await waitFor(() => expect(channels()).toContain('tmux:attach'))
+    fakeOfs.handle('tmux:attach', () => ({ termId: 'restored-term' }))
+    act(() => {
+      fakeOfs.emit('session:state', { sessionId: 'att-sess', state: 'reconnecting' })
+      fakeOfs.emit('session:state', { sessionId: 'att-sess', state: 'ready' })
+    })
+    await waitFor(() => expect(useSessionStore.getState().tabs[0].termId).toBe('restored-term'))
+    await act(async () => { pending.resolve({ termId: 'obsolete-term' }) })
+    expect(fakeOfs.invokes).toContainEqual({ channel: 'term:close', payload: 'obsolete-term' })
+    expect(useSessionStore.getState().tabs[0].termId).toBe('restored-term')
+  })
+
+  it('detach 后释放旧终端注册，运行中重新附着不会增加客户端', async () => {
+    seedTab()
+    mount()
+    await waitFor(() => expect(channels()).toContain('term:ready'))
+    await act(async () => { await useSessionStore.getState().reattachTmuxTab('att-tab') })
+    expect(channels().filter((c) => c === 'tmux:attach')).toHaveLength(1)
+    act(() => fakeOfs.emit('term:exit', { termId: 'tmux-term', reason: 'closed' }))
+    expect(getTerm('tmux-term')).toBeUndefined()
+  })
   it('ready 后直调 tmux:attach 并完成 term:ready 握手，全程不开 shell', async () => {
     seedTab()
     mount()

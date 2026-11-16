@@ -67,24 +67,28 @@ export function parseProcessEo(text: string, limit = PROCESS_PANEL_MAX_PROCS): P
 
 /**
  * BusyBox / 无 --sort 时的 `ps aux` 回落。
- * 完整 aux：USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND…
- * BusyBox 给不出可靠 %CPU/%MEM 时填 0，名单本身仍有价值。
+ * procps aux：USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND…
+ * BusyBox 按 PID USER 开头的表头识别，缺少的 CPU / RSS 列填 0。
  */
 export function parseProcessAux(text: string, limit = PROCESS_PANEL_MAX_PROCS): ProcessEntry[] {
   const out: ProcessEntry[] = []
+  const header = text.split('\n').find((line) => /^\s*PID\s+USER\s+/.test(line))?.trim().split(/\s+/)
+  const commandIndex = header ? header.findIndex((column) => /^(COMMAND|CMD|ARGS)$/.test(column)) : 10
+  const rssIndex = header ? header.indexOf('RSS') : 5
+  const cpuIndex = header ? header.indexOf('%CPU') : 2
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (!line) continue
     const f = line.split(/\s+/)
-    if (f.length < 11) continue
-    const pid = Number(f[1])
-    const cpu = Number(f[2])
-    const rssKb = Number(f[5])
+    if (commandIndex < 0 || f.length <= commandIndex) continue
+    const pid = Number(f[header ? 0 : 1])
+    const cpu = cpuIndex < 0 ? 0 : Number(f[cpuIndex])
+    const rssKb = rssIndex < 0 ? 0 : Number(f[rssIndex])
     if (!Number.isInteger(pid) || pid <= 0 || !Number.isSafeInteger(pid)) continue
     if (!Number.isFinite(cpu) || cpu < 0 || !Number.isFinite(rssKb) || rssKb < 0) continue
-    const user = f[0]
+    const user = f[header ? 1 : 0]
     if (!user || user === 'USER' || user.length > 64) continue
-    const cmdline = f.slice(10).join(' ').slice(0, 4000)
+    const cmdline = f.slice(commandIndex).join(' ').slice(0, 4000)
     const name = processShortName(cmdline).slice(0, 256) || String(pid)
     out.push({
       pid,
@@ -157,7 +161,13 @@ export class ProcessPanelCollector {
     const gen = ++this.openGen
     this.pause()
     this.setState('running')
-    const channel = await this.openChannel()
+    let channel: ClientChannel
+    try {
+      channel = await this.openChannel()
+    } catch (err) {
+      if (this.stopped || gen !== this.openGen) return
+      throw err
+    }
     if (this.stopped || gen !== this.openGen) {
       channel.close()
       return

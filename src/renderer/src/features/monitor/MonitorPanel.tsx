@@ -48,7 +48,7 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
   const openPortTrafficTab = useSessionStore((s) => s.openPortTrafficTab)
   const openProcessPanelTab = useSessionStore((s) => s.openProcessPanelTab)
   const [showCores, setShowCores] = useState(false)
-  const [showProcs, setShowProcs] = useState(false)
+  const sessionTitle = tab.customTitle ?? tab.title
 
   // 会话就绪 → 启动采集；关闭面板时由父组件调 stop
   useEffect(() => {
@@ -109,27 +109,40 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
       <div className={styles.body}>
         {/* 系统信息 */}
         {staticInfo && (
-          <div className={styles.card}>
-            <div className={styles.cardHead}>
+          <button
+            type="button"
+            className={`${styles.card} ${styles.clickableCard}`}
+            onClick={() => openProcessPanelTab(tab.id, `${sessionTitle} · ${t('processPanel.tab')}`)}
+          >
+            <span className={styles.cardHead}>
               <span className={styles.cardHeadTitle}>{t('monitor.system')}</span>
-            </div>
+              <span className={styles.cardActionHint}>
+                {t('processPanel.open')} <ChevronRight size={13} aria-hidden="true" />
+              </span>
+            </span>
             <Kv k={t('monitor.hostname')} v={staticInfo.hostname} />
             <Kv k={t('monitor.distro')} v={staticInfo.distro} />
             <Kv k={t('monitor.kernel')} v={`${staticInfo.kernel} (${staticInfo.arch})`} />
             <Kv k={t('monitor.ip')} v={staticInfo.ips.join(', ') || '-'} />
             <Kv k={t('monitor.uptime')} v={formatDuration(snapshot.uptimeSec)} />
-          </div>
+          </button>
         )}
 
         {/* CPU */}
-        <div className={styles.card}>
+        <div className={`${styles.card} ${styles.clickableCard}`}>
           <div className={styles.cardHead}>
             <span className={styles.cardHeadTitle}>{t('monitor.cpu')}</span>
             <span className={styles.subText}>
               {t('monitor.load')} {snapshot.cpu.loadAvg.map((n) => n.toFixed(2)).join(' ')}
             </span>
-            <button type="button" className={styles.cardToggle} aria-label={t('monitor.cpuCores')} aria-expanded={showCores} onClick={() => setShowCores((v) => !v)}>
-              {showCores ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <button
+              type="button"
+              className={`${styles.cardToggle} ${styles.cardActionHint}`}
+              aria-label={t('monitor.cpuCores')}
+              aria-expanded={showCores}
+              onClick={() => setShowCores((v) => !v)}
+            >
+              {showCores ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
             </button>
           </div>
           <div className={styles.bigNumber}>
@@ -156,16 +169,16 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
         {/* 网络 */}
         <button
           type="button"
-          className={`${styles.card} ${styles.networkCard}`}
-          onClick={() => openPortTrafficTab(tab.id, `${tab.customTitle ?? tab.title} · ${t('portTraffic.tab')}`)}
+          className={`${styles.card} ${styles.clickableCard}`}
+          onClick={() => openPortTrafficTab(tab.id, `${sessionTitle} · ${t('portTraffic.tab')}`)}
         >
-          <div className={styles.cardHead}>
+          <span className={styles.cardHead}>
             <span className={styles.cardHeadTitle}>{t('monitor.network')}</span>
             <span className={styles.cardActionHint}>
-              {t('portTraffic.open')} <ChevronRight size={13} />
+              {t('portTraffic.open')} <ChevronRight size={13} aria-hidden="true" />
             </span>
-          </div>
-          <div className={styles.netLegend}>
+          </span>
+          <span className={styles.netLegend}>
             <span className={styles.netItem}>
               <span style={{ color: accent }}>↓</span>
               <span className={styles.bigNumber} style={{ fontSize: 16 }}>
@@ -180,7 +193,7 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
                 <span className={styles.unit}>/s</span>
               </span>
             </span>
-          </div>
+          </span>
           {/* 下行 = 渐变面积（绿→红按量），上行 = 橙线叠加，与图例配色一致 */}
           <MonitorGraph
             primary={[...history.rxBps]}
@@ -269,62 +282,6 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
           </div>
         )}
 
-        {/* 进程 Top —— 卡片可点进完整进程面板；折叠箭头仍只控制迷你列表 */}
-        {snapshot.topProcs && snapshot.topProcs.length > 0 && (
-          <div className={styles.card}>
-            <div className={styles.cardHead}>
-              <button
-                type="button"
-                className={styles.cardHeadTitle}
-                style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' }}
-                onClick={() =>
-                  openProcessPanelTab(
-                    tab.id,
-                    `${tab.customTitle ?? tab.title} · ${t('processPanel.tab')}`
-                  )
-                }
-              >
-                {t('monitor.topProcs')}
-              </button>
-              <span className={styles.cardActionHint} style={{ marginRight: 4 }}>
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 2 }}
-                  onClick={() =>
-                    openProcessPanelTab(
-                      tab.id,
-                      `${tab.customTitle ?? tab.title} · ${t('processPanel.tab')}`
-                    )
-                  }
-                >
-                  {t('processPanel.open')} <ChevronRight size={13} />
-                </button>
-              </span>
-              <span className={styles.cardToggle} onClick={() => setShowProcs((v) => !v)}>
-                {showProcs ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              </span>
-            </div>
-            {showProcs && (
-              <>
-                <div className={styles.procRow}>
-                  <span className={styles.subText}>{t('monitor.procName')}</span>
-                  <span className={`${styles.subText} ${styles.procNum}`}>CPU</span>
-                  <span className={`${styles.subText} ${styles.procNum}`}>MEM</span>
-                </div>
-                {snapshot.topProcs.map((p) => (
-                  <div key={p.pid} className={styles.procRow}>
-                    <span className={styles.procName} title={`PID ${p.pid}`}>
-                      {p.name}
-                    </span>
-                    <span className={styles.procNum}>{p.cpuPct.toFixed(1)}</span>
-                    <span className={styles.procNum}>{p.memPct.toFixed(1)}</span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        )}
-
         {snapshot.net.length === 0 && (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('monitor.noIface')} />
         )}
@@ -358,12 +315,12 @@ function LatencyMetric({
 
 function Kv({ k, v }: { k: string; v: string }): React.JSX.Element {
   return (
-    <div className={styles.kvRow}>
+    <span className={styles.kvRow}>
       <span className={styles.kvKey}>{k}</span>
       <span className={styles.kvValue} title={v}>
         {v}
       </span>
-    </div>
+    </span>
   )
 }
 

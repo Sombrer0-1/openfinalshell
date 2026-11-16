@@ -124,8 +124,6 @@
     "memory": "記憶體",
     "network": "網路",
     "disk": "磁碟",
-    "topProcs": "程序排行",
-    "procName": "程序",
     "latency": "延遲",
     "directLatency": "直連 IP",
     "connectionLatency": "實際連線",
@@ -163,7 +161,7 @@
   },
   "processPanel": {
     "tab": "Processes",
-    "open": "View all processes",
+    "open": "查看程序資訊",
     "title": "Process manager",
     "updated": "Updated {{time}}",
     "total": "{{count}} processes",

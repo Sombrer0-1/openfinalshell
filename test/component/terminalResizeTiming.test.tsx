@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { SessionId } from '@shared/types'
 import { TerminalPane } from '@/features/terminal/TerminalPane'
 import { useSettingsStore } from '@/stores/useSettingsStore'
-import type { SessionTab } from '@/stores/useSessionStore'
+import { useSessionStore, type SessionTab } from '@/stores/useSessionStore'
 import { deferred, fakeOfs } from './fakeOfs'
 
 const rig = vi.hoisted(() => ({
@@ -34,9 +34,11 @@ const observers: Array<{ callback: ResizeObserverCallback; target?: Element }> =
 const tab: SessionTab = { id: 'resize-tab', profileId: 'p1', sessionId: 'resize-session' as SessionId, termId: null, title: 'server', state: 'ready', sftpOpen: false, monitorOpen: true, shellEpoch: 0 }
 let opening: ReturnType<typeof deferred<{ termId: string }>>
 async function flush(): Promise<void> { await act(async () => { for (let i = 0; i < 12; i++) await Promise.resolve() }) }
-async function mount(): Promise<void> {
-  render(<AntdApp><TerminalPane tab={tab} active uiMode="light" /></AntdApp>)
+async function mount() {
+  const view = render(<AntdApp><TerminalPane tab={tab} active uiMode="light" /></AntdApp>)
   await flush()
+  await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+  return view
 }
 async function resize(cols: number, rows: number): Promise<void> {
   rig.cols = cols; rig.rows = rows
@@ -60,6 +62,7 @@ beforeEach(() => {
   fakeOfs.handle('term:close', () => undefined)
   fakeOfs.handle('term:ready', () => undefined)
   useSettingsStore.setState({ settings: structuredClone(DEFAULT_SETTINGS) })
+  useSessionStore.setState({ tabs: [{ ...tab }], activeTabId: tab.id })
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => rig.width)
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => rig.height)
   vi.stubGlobal('ResizeObserver', class {
@@ -129,5 +132,25 @@ describe('terminal resize synchronization', () => {
     expect(rig.term!.cols).toBe(100)
     expect(rig.term!.rows).toBe(30)
     expect(writes()).toEqual([])
+  })
+
+  it('preserves the grid while hidden and measures only after the active layout settles', async () => {
+    const view = await mount()
+    await act(async () => { opening.resolve({ termId: 'term-resize' }) })
+    const currentTab = useSessionStore.getState().tabs[0]
+    view.rerender(<AntdApp><TerminalPane tab={currentTab} active={false} uiMode="light" /></AntdApp>)
+    await resize(129, 30)
+    expect(rig.term!.cols).toBe(100)
+    expect(writes()).toEqual([])
+
+    // Reopening the monitor pane briefly leaves the terminal with the previous layout's width.
+    rig.cols = 108
+    view.rerender(<AntdApp><TerminalPane tab={currentTab} active uiMode="light" /></AntdApp>)
+    expect(rig.term!.cols).toBe(100)
+    rig.cols = 82
+    await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+    expect(rig.term!.cols).toBe(82)
+    expect(writes()).toEqual([{ termId: 'term-resize', cols: 82, rows: 30 }])
+    expect(rig.refresh).toHaveBeenLastCalledWith(0, 29)
   })
 })

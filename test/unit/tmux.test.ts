@@ -54,9 +54,9 @@ describe('tmux 脚本构造', () => {
     const frame = buildTmuxListFrame(7)
     expect(frame).toContain('@@OFS:BEGIN:7@@')
     expect(frame).toContain('@@OFS:SESSIONS@@')
-    // 字段顺序：id\twindows\tattached\tcreated\tname —— 名称放最后，含空格 / 中文 / 前导 - 的行才能按定长前缀切分
+    // 字段顺序：id|windows|attached|created|name —— 名称放最后，含空格 / 中文 / 前导 - 的行才能按定长前缀切分
     expect(frame).toContain(
-      `out=$(tmux list-sessions -F '#{session_id}\t#{session_windows}\t#{session_attached}\t#{session_created}\t#{session_name}' 2>&1)`
+      `out=$(tmux list-sessions -F '#{session_id}|#{session_windows}|#{session_attached}|#{session_created}|#{session_name}' 2>&1)`
     )
     // 退出码 1 不等于没有 server：按 stderr 文本区分 no-server（合法空态）与其余错误
     expect(frame).toContain('*"no server running"*')
@@ -105,18 +105,18 @@ describe('tmux 列表解析', () => {
   it('名称含空格、中文、前导 - 的行按前四个定长字段可靠切分', () => {
     const sessions = parseTmuxSessions(
       [
-        '$2\t3\t1\t1748000000\tmy dev session',
-        '$1\t1\t0\t1748000001\t中文会话',
-        '$4\t2\t0\t1748000002\t-dash-name',
-        // 名称内被 tmux 转义后残余的 \t 归名称（第 5 列吸收所有剩余列）
-        '$5\t1\t2\t1748000003\tname\twith\ttabs'
+        '$2|3|1|1748000000|my dev session',
+        '$1|1|0|1748000001|中文会话',
+        '$4|2|0|1748000002|-dash-name',
+        // 名称中的 | 归名称（第 5 列吸收所有剩余列）
+        '$5|1|2|1748000003|name|with|tabs'
       ].join('\r\n')
     )
     // 名称按 UTF-16 码元定序：'-' < ASCII 字母 < 中文
     expect(sessions).toEqual([
       { id: '$4', name: '-dash-name', windows: 2, attached: 0, created: 1748000002 },
       { id: '$2', name: 'my dev session', windows: 3, attached: 1, created: 1748000000 },
-      { id: '$5', name: 'name\twith\ttabs', windows: 1, attached: 2, created: 1748000003 },
+      { id: '$5', name: 'name|with|tabs', windows: 1, attached: 2, created: 1748000003 },
       { id: '$1', name: '中文会话', windows: 1, attached: 0, created: 1748000001 }
     ])
   })
@@ -124,15 +124,15 @@ describe('tmux 列表解析', () => {
   it('id 不合 $N 形状、字段数不足、数值列非法的行一律丢弃', () => {
     const sessions = parseTmuxSessions(
       [
-        'weird\t1\t0\t1748000000\tbadid', // 非 $N
-        'x$1\t1\t0\t1748000000\tpartial', // 仍非 $N
-        '$3\t1\t0\t1748000000', // 字段不足
-        '$4\t0\t0\t1748000000\tzero-win', // windows < 1
-        '$5\t-1\t0\t1748000000\tneg-win',
-        '$6\t1\t-1\t1748000000\tneg-att',
-        '$7\t1\t0\tabc\tnan-created',
-        '$8\t1.5\t0\t1748000000\tfrac-win',
-        '$9\t1\t0\t1748000000\tgood'
+        'weird|1|0|1748000000|badid', // 非 $N
+        'x$1|1|0|1748000000|partial', // 仍非 $N
+        '$3|1|0|1748000000', // 字段不足
+        '$4|0|0|1748000000|zero-win', // windows < 1
+        '$5|-1|0|1748000000|neg-win',
+        '$6|1|-1|1748000000|neg-att',
+        '$7|1|0|abc|nan-created',
+        '$8|1.5|0|1748000000|frac-win',
+        '$9|1|0|1748000000|good'
       ].join('\n')
     )
     expect(sessions.map((s) => s.id)).toEqual(['$9'])
@@ -140,7 +140,7 @@ describe('tmux 列表解析', () => {
 
   it('按名称稳定排序，同名按 id 定序（刷新不跳行）', () => {
     const sessions = parseTmuxSessions(
-      ['$3\t1\t0\t1\tb', '$1\t1\t0\t1\ta', '$2\t1\t0\t1\tb'].join('\n')
+      ['$3|1|0|1|b', '$1|1|0|1|a', '$2|1|0|1|b'].join('\n')
     )
     expect(sessions.map((s) => `${s.name}/${s.id}`)).toEqual(['a/$1', 'b/$2', 'b/$3'])
   })
@@ -230,7 +230,7 @@ describe('TmuxCollector', () => {
     const probe = makeChannel((script) =>
       script.includes('HASTMUX')
         ? frame(1, '@@OFS:HASTMUX@@\nyes\n@@OFS:VERSION@@\ntmux 3.3a\n')
-        : frame(2, '@@OFS:SESSIONS@@\n$1\t1\t0\t1748000000\tmain\n@@OFS:MOUSE@@\noff\n')
+        : frame(2, '@@OFS:SESSIONS@@\n$1|1|0|1748000000|main\n@@OFS:MOUSE@@\noff\n')
     )
     const collector = new TmuxCollector('session-collect', async () => probe.channel as never, {
       onSnapshot: (s) => snapshots.push({ sessions: s.sessions, mouseOn: s.mouseOn }),
@@ -324,18 +324,18 @@ describe('TmuxCollector', () => {
         [
           '@@OFS:BEGIN:1@@',
           '@@OFS:SESSIONS@@',
-          '$1\t1\t0\t1\tstale',
+          '$1|1|0|1|stale',
           '@@OFS:END:1@@',
           '@@OFS:BEGIN:2@@',
           '@@OFS:SESSIONS@@',
-          '$2\t1\t0\t1\tcurrent',
+          '$2|1|0|1|current',
           '@@OFS:END:2@@',
           ''
         ].join('\n')
       )
     )
 
-    await expect(result).resolves.toBe('@@OFS:SESSIONS@@\n$2\t1\t0\t1\tcurrent\n')
+    await expect(result).resolves.toBe('@@OFS:SESSIONS@@\n$2|1|0|1|current\n')
   })
 
   it('连续 3 次帧超时才进 failed（前两次只是计数，不误杀慢链路）', async () => {

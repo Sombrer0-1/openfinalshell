@@ -407,10 +407,12 @@ describe('进程面板标签', () => {
     seedTab({ state: 'ready' })
     useSessionStore.getState().openProcessPanelTab('tab-1', 'srv · 进程')
     const panelTabId = useSessionStore.getState().tabs[1].id
+    useSessionStore.setState(({ tabs }) => ({ tabs: [...tabs, { ...tabs[0], id: 'tab-2' }] }))
 
     await useSessionStore.getState().closeTab(panelTabId)
 
-    expect(useSessionStore.getState().tabs.map((t) => t.id)).toEqual(['tab-1'])
+    expect(useSessionStore.getState().tabs.map((t) => t.id)).toEqual(['tab-1', 'tab-2'])
+    expect(useSessionStore.getState().activeTabId).toBe('tab-1')
     expect(calls.map(([channel]) => channel)).toContain('processPanel:stop')
     expect(calls.map(([channel]) => channel)).not.toContain('session:close')
   })
@@ -486,6 +488,30 @@ describe('session:state → tab', () => {
  *   关闭标签 = detach（远端会话存活），只有面板的「关闭会话」才是 kill。
  */
 describe('tmux 面板标签（tmuxPanel）', () => {
+  it('自有连接认证失败后可以重试', async () => {
+    invokeImpl = async () => { throw new Error('authentication failed') }
+    useSessionStore.getState().openTmuxPanelTab('p1')
+    await vi.waitFor(() => expect(tab().state).toBe('closed'))
+    invokeImpl = async () => ({ sessionId: 'retried-panel' })
+    calls.length = 0
+    await useSessionStore.getState().reconnectTab(tab().id)
+    expect(calls).toContainEqual(['session:open', ['p1']])
+    expect(tab()).toMatchObject({ sessionId: 'retried-panel', state: 'ready' })
+  })
+
+  it.each(['panel', 'attach'] as const)('建连完成前关闭 %s 标签会释放迟到的连接', async (kind) => {
+    let resolveOpen!: (value: { sessionId: string }) => void
+    const pending = new Promise<{ sessionId: string }>((resolve) => { resolveOpen = resolve })
+    invokeImpl = async (channel) => channel === 'session:open' ? pending : undefined
+    const opened = kind === 'attach'
+      ? useSessionStore.getState().openTmuxAttachTab('p1', '$0')
+      : useSessionStore.getState().openTmuxPanelTab('p1')
+    await useSessionStore.getState().closeTab(tab().id)
+    resolveOpen({ sessionId: 'late-panel-connection' })
+    await opened
+    await vi.waitFor(() => expect(calls).toContainEqual(['session:close', ['late-panel-connection']]))
+    expect(useSessionStore.getState().tabs).toEqual([])
+  })
   it('有就绪终端时复用其连接：不发 session:open，面板成为源终端的子面板', () => {
     seedTab({ kind: 'terminal', state: 'ready' })
     useSessionStore.getState().openTmuxPanelTab('p1')
@@ -564,6 +590,12 @@ describe('tmux 面板标签（tmuxPanel）', () => {
 })
 
 describe('tmux 附着标签（tmuxAttach）', () => {
+  it('正常附着时重复操作保留现有通道', async () => {
+    seedAttachTab({ termId: 'live-term' })
+    await useSessionStore.getState().reattachTmuxTab('tab-1')
+    expect(tab()).toMatchObject({ termId: 'live-term', state: 'ready', shellEpoch: 0 })
+    expect(calls).toEqual([])
+  })
   function seedAttachTab(overrides: Record<string, unknown> = {}): string {
     useSessionStore.setState({
       tabs: [
@@ -637,8 +669,8 @@ describe('tmux 附着标签（tmuxAttach）', () => {
   it('附着失败（连接仍在，如 sessionGone）后「重新附着」同样不走 session:reconnect', async () => {
     seedAttachTab({ termId: null, everReady: true })
     // TerminalPane 的附着失败路径：closed 但 SSH 连接仍在（会先调 noteTmuxAttachFailed）
-    useSessionStore.getState().updateTab('tab-1', { state: 'closed', error: '会话已不存在' })
     useSessionStore.getState().noteTmuxAttachFailed('tab-1')
+    useSessionStore.getState().updateTab('tab-1', { state: 'closed', error: '会话已不存在' })
 
     await useSessionStore.getState().reattachTmuxTab('tab-1')
 

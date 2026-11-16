@@ -49,7 +49,7 @@ const SUBMIT_CAPTURE_WINDOW_MS = 3000
  * 终端面板：一个 tab 一个常驻 xterm 实例（重连时复用，缓冲不丢）。
  * - 会话 ready（或 shellEpoch 递增）后量取 cols/rows 开 shell
  * - WebGL 仅在活动 tab 挂载
- * - ResizeObserver + 100ms 防抖 → fit → term:resize（尺寸为 0 时跳过，防 1×1 毁 vim 布局）
+ * - 活动 tab 量取容器尺寸 → fit → term:resize，ResizeObserver 走 100ms 防抖
  */
 export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element {
   const { t } = useTranslation()
@@ -75,7 +75,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
    * （为什么要等换行：见 commandCapture.ts 文件头）
    */
   const pendingSubmitRef = useRef<{ snap: PromptSnapshot; expiresAt: number } | null>(null)
-  const openingRef = useRef(false)
+  const openingRef = useRef<{ sessionId: string; shellEpoch: number } | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -97,7 +97,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
   const sendResize = useCallback((): void => {
     const bundle = bundleRef.current
     const el = mountRef.current
-    if (!bundle || !el || el.clientWidth === 0 || el.clientHeight === 0) return
+    if (!activeRef.current || !bundle || !el || el.clientWidth === 0 || el.clientHeight === 0) return
     bundle.fit.fit()
     // Rebuild cached glyph positions even if a pixel resize keeps the same grid.
     bundle.term.clearTextureAtlas()
@@ -424,15 +424,32 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
 
   // ---- 会话 ready / 重连（shellEpoch 变化）→ 开 shell；tmuxAttach → 附着通道 ----
   useEffect(() => {
+    const previous = termIdRef.current
+    if (previous && previous !== tab.termId) {
+      unregisterTerm(previous)
+      termIdRef.current = null
+      ptySizeRef.current = null
+      pendingSubmitRef.current = null
+    }
+  }, [tab.termId])
+
+  useEffect(() => {
     const bundle = bundleRef.current
-    if (!bundle || tab.state !== 'ready' || tab.termId || !tab.sessionId || openingRef.current) return
+    if (!bundle || tab.state !== 'ready' || tab.termId || !tab.sessionId) return
+    if (openingRef.current?.sessionId === tab.sessionId && openingRef.current.shellEpoch === tab.shellEpoch) return
     // 未标记 kind 的旧 tab 视为 terminal（SessionTab.kind 的既有约定）
     const kind = tab.kind ?? 'terminal'
     if (kind !== 'terminal' && kind !== 'tmuxAttach') return
     // 附着模式：不开 shell，直接 exec `tmux attach`（自带 pty）；目标必须已带在标签上
     const targetId = kind === 'tmuxAttach' ? tab.targetId : undefined
     if (kind === 'tmuxAttach' && !targetId) return
-    openingRef.current = true
+    const request = { sessionId: tab.sessionId, shellEpoch: tab.shellEpoch }
+    openingRef.current = request
+    const isCurrent = (): boolean => {
+      const current = useSessionStore.getState().tabs.find((candidate) => candidate.id === tab.id)
+      return bundleRef.current === bundle && current?.state === 'ready' &&
+        current.sessionId === request.sessionId && current.shellEpoch === request.shellEpoch
+    }
     sendResize()
     const { cols, rows } = bundle.term
     const opening: Promise<{ termId: string }> =
@@ -441,7 +458,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         : ofs.invoke('term:open', { sessionId: tab.sessionId, cols, rows })
     void opening
       .then(async ({ termId }) => {
-        if (bundleRef.current !== bundle) {
+        if (!isCurrent()) {
           await ofs.invoke('term:close', termId)
           return
         }
@@ -458,9 +475,10 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         }
         // tmux:attach 与 term:open 同款握手：不 ready 一下，ShellSession 会一直缓冲输出
         await ofs.invoke('term:ready', termId)
-        if (active && bundleRef.current === bundle) bundle.term.focus()
+        if (activeRef.current && isCurrent()) bundle.term.focus()
       })
       .catch((err: Error) => {
+        if (!isCurrent()) return
         // 附着失败（如重连期间会话被外部杀掉 → sessionGone）原样透出，已退出浮层给重试。
         // 连接本身通常仍在：标记后「重新附着」跳过重连直接重开通道；连接若确实已断，
         // session:state 非 ready 事件会清掉标记，重新附着回到正常重连路径。
@@ -468,7 +486,7 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
         updateTab(tab.id, { state: 'closed', error: err.message })
       })
       .finally(() => {
-        openingRef.current = false
+        if (openingRef.current === request) openingRef.current = null
       })
   }, [
     tab.state,
@@ -488,14 +506,15 @@ export function TerminalPane({ tab, active, uiMode }: Props): React.JSX.Element 
   useEffect(() => {
     const bundle = bundleRef.current
     if (!bundle) return
-    if (active) {
+    if (!active || !settings.terminal.webgl) bundle.detachWebgl()
+    if (!active) return
+    // 激活标签时监控栏可能重新挂载，等分栏布局完成后再测量。
+    const frame = requestAnimationFrame(() => {
       if (settings.terminal.webgl) bundle.attachWebgl()
-      else bundle.detachWebgl()
       sendResize()
       bundle.term.focus()
-    } else {
-      bundle.detachWebgl()
-    }
+    })
+    return () => cancelAnimationFrame(frame)
   }, [active, settings.terminal.webgl, sendResize])
 
   // ---- 主题热更新 ----

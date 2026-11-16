@@ -139,7 +139,7 @@ describe('监控采集', () => {
     expect(snap.connectionLatencyMs!).toBeLessThan(5000)
   })
 
-  it('df 与进程列表按 tick 轮换采集（非每帧都带）', async () => {
+  it('磁盘容量按固定间隔采集（非每帧都带）', async () => {
     await waitFor(
       () => snapshots().some((s) => s.diskFs !== null),
       20000,
@@ -148,7 +148,6 @@ describe('监控采集', () => {
     const withDf = snapshots().find((s) => s.diskFs !== null)!
     expect(withDf.diskFs!.map((f) => f.mount)).toEqual(['/', '/data'])
     expect(withDf.diskFs!.find((f) => f.mount === '/data')!.usePct).toBeGreaterThan(90)
-    expect(withDf.topProcs?.[0]).toEqual({ pid: 1234, cpuPct: 45.2, memPct: 3.1, name: 'node' })
 
     // 大多数帧不带 df（每 5 tick 一次）
     expect(snapshots().some((s) => s.diskFs === null)).toBe(true)

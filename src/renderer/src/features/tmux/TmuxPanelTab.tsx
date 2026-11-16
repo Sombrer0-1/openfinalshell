@@ -156,7 +156,7 @@ export function TmuxPanelTab({ tab }: Props): React.JSX.Element {
   }
 
   // ---- 自有连接还没建立 / 建立失败 ----
-  if (!sessionId) {
+  if (!sessionId || tab.state !== 'ready') {
     if (tab.state === 'closed') {
       return (
         <div className={styles.empty}>

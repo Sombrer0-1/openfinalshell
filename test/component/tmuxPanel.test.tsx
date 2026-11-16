@@ -121,6 +121,21 @@ describe('面板五态渲染', () => {
     expect(screen.getByRole('button', { name: cjkName(i18n.t('common.retry')) })).toBeTruthy()
   })
 
+  it('SSH 连接已断时隐藏旧列表，重试会重新连接', async () => {
+    const tab = makeTab({ state: 'closed', error: 'network lost' })
+    useSessionStore.setState({ tabs: [tab], activeTabId: tab.id })
+    fakeOfs.handle('session:reconnect', () => undefined)
+    setPanelState('running')
+    setSnapshot([ROW])
+    mount(tab)
+    expect(screen.getByText('network lost')).toBeTruthy()
+    expect(screen.queryByText('main')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: cjkName(i18n.t('common.retry')) }))
+    await waitFor(() => expect(fakeOfs.invokes).toContainEqual({
+      channel: 'session:reconnect', payload: 'tmux-ui'
+    }))
+  })
+
   it('未安装 tmux：显示未安装提示，且无重试按钮（重试解决不了没装）', () => {
     mount()
     setPanelState('unsupported')

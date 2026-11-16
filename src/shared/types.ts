@@ -795,8 +795,6 @@ export interface MonitorSnapshot {
   /** 非 df tick 为 null（磁盘容量每 5 tick 采一次） */
   diskFs: Array<{ fs: string; mount: string; totalKb: number; usedKb: number; usePct: number }> | null
   diskIo: Array<{ dev: string; readBps: number; writeBps: number }>
-  /** best-effort，解析失败则无 */
-  topProcs?: Array<{ pid: number; name: string; cpuPct: number; memPct: number }>
   /**
    * 连接/套接字计数。每 tick 都采（读 /proc/net/sockstat 是 O(1)，与连接数无关）；
    * 文件缺失（非 Linux、极简容器）为 null。

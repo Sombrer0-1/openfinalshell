@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import '@/i18n'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import type { MonitorSnapshot, SessionId } from '@shared/types'
@@ -20,6 +20,8 @@ let snapshot: MonitorSnapshot
 let container: HTMLElement
 const openPortTrafficTab = vi.fn()
 const originalOpenPortTraffic = useSessionStore.getState().openPortTrafficTab
+const openProcessPanelTab = vi.fn()
+const originalOpenProcessPanel = useSessionStore.getState().openProcessPanelTab
 function fill(label: string): HTMLElement { return screen.getByRole('progressbar', { name: label }).firstElementChild as HTMLElement }
 function mount(): void { container = render(<MonitorPanel tab={tab} onClose={() => {}} />).container }
 function update(next: MonitorSnapshot): void {
@@ -30,6 +32,7 @@ beforeEach(() => {
   fakeOfs.handle('monitor:start', () => undefined)
   graph.mockClear()
   openPortTrafficTab.mockClear()
+  openProcessPanelTab.mockClear()
   snapshot = {
     ts: 1, uptimeSec: 900,
     cpu: { usagePct: 84.5, perCore: [0, 50, 79, 100], loadAvg: [43.09, 52.01, 54.58] },
@@ -39,8 +42,12 @@ beforeEach(() => {
     diskIo: [], conns: null, directLatencyMs: 12, connectionLatencyMs: 21
   }
   useSettingsStore.setState({ settings: structuredClone(DEFAULT_SETTINGS) })
-  useMonitorStore.setState({ latest: { [sessionId]: snapshot }, staticInfo: {}, state: {} })
-  useSessionStore.setState({ openPortTrafficTab })
+  useMonitorStore.setState({
+    latest: { [sessionId]: snapshot },
+    staticInfo: { [sessionId]: { hostname: 'server.example', distro: 'Ubuntu 22.04 LTS', kernel: '5.15.0', arch: 'x86_64', ips: ['192.0.2.1'], cpuCores: 4 } },
+    state: {}
+  })
+  useSessionStore.setState({ openPortTrafficTab, openProcessPanelTab })
   const history = historyOf(sessionId)
   history.rxBps.splice(0, history.rxBps.length, 100, 1024)
   history.txBps.splice(0, history.txBps.length, 200, 2048)
@@ -48,10 +55,20 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   useMonitorStore.getState().clear(sessionId)
-  useSessionStore.setState({ openPortTrafficTab: originalOpenPortTraffic })
+  useSessionStore.setState({ openPortTrafficTab: originalOpenPortTraffic, openProcessPanelTab: originalOpenProcessPanel })
 })
 
 describe('compact monitor panel', () => {
+  it('opens process management from the system card with all system information visible', () => {
+    mount()
+    const system = screen.getByRole('button', { name: /系统信息.*查看进程信息/ })
+    for (const value of ['server.example', 'Ubuntu 22.04 LTS', '5.15.0 (x86_64)', '192.0.2.1', '15m 0s']) {
+      expect(within(system).getByText(value)).toBeTruthy()
+    }
+    fireEvent.click(within(system).getByText('server.example'))
+    expect(openProcessPanelTab).toHaveBeenCalledWith(tab.id, 'server · 进程')
+  })
+
   it('shows CPU, memory, Swap and disk percentages as progress bars; only network has a graph', () => {
     mount()
     expect(screen.getByRole('progressbar', { name: 'CPU' }).getAttribute('aria-valuenow')).toBe('84.5')
