@@ -163,6 +163,22 @@
     "note": "Only active TCP connections visible to the current server user are shown. Rates are estimated from consecutive kernel byte-counter samples.",
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
+  "gpuProcess": {
+    "tab": "GPU",
+    "open": "Показать загрузку",
+    "title": "Процессы GPU",
+    "updated": "Обновлено {{time}}",
+    "collecting": "Сбор процессов GPU…",
+    "unsupported": "На этом сервере нет nvidia-smi, поэтому процессы по каждой GPU недоступны",
+    "failed": "Не удалось собрать процессы GPU",
+    "empty": "GPU не обнаружены",
+    "noProcess": "Нет процессов",
+    "pid": "PID",
+    "user": "Пользователь",
+    "name": "Процесс",
+    "util": "Загрузка",
+    "memory": "VRAM"
+  },
   "processPanel": {
     "tab": "Processes",
     "open": "Посмотреть процессы",

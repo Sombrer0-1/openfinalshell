@@ -3,6 +3,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { TerminalPane } from '@/features/terminal/TerminalPane'
 import { SftpPane } from '@/features/sftp/SftpPane'
 import { PortTrafficTab } from '@/features/portTraffic/PortTrafficTab'
+import { GpuProcessTab } from '@/features/gpuProcess/GpuProcessTab'
 import { ProcessPanelTab } from '@/features/processPanel/ProcessPanelTab'
 import { TmuxPanelTab } from '@/features/tmux/TmuxPanelTab'
 import { RdpPane } from './RdpPane'
@@ -34,6 +35,8 @@ export function SessionViewHost({ tabs, activeTabId, uiMode }: Props): React.JSX
             <ErrorBoundary label={`session:${tab.id}`}>
               {tab.kind === 'portTraffic' ? (
                 <PortTrafficTab tab={tab} />
+              ) : tab.kind === 'gpuProcess' ? (
+                <GpuProcessTab tab={tab} />
               ) : tab.kind === 'processPanel' ? (
                 <ProcessPanelTab tab={tab} />
               ) : tab.kind === 'tmuxPanel' ? (

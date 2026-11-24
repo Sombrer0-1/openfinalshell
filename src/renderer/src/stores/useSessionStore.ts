@@ -6,17 +6,18 @@ import i18n from '@/i18n'
 import { useSettingsStore } from './useSettingsStore'
 import { useMonitorStore } from './useMonitorStore'
 import { usePortTrafficStore } from './usePortTrafficStore'
+import { useGpuProcessStore } from './useGpuProcessStore'
 import { useProcessPanelStore } from './useProcessPanelStore'
 import { useTmuxStore } from './useTmuxStore'
 import { useConnectionStore } from './useConnectionStore'
 
-export type SessionTabKind = 'terminal' | 'portTraffic' | 'processPanel' | 'rdp' | 'tmuxPanel' | 'tmuxAttach'
+export type SessionTabKind = 'terminal' | 'portTraffic' | 'processPanel' | 'gpuProcess' | 'rdp' | 'tmuxPanel' | 'tmuxAttach'
 
 export interface SessionTab {
   id: string
   /** 未标记的旧 tab 视为 terminal，避免升级时破坏运行中的状态。 */
   kind?: SessionTabKind
-  /** portTraffic / processPanel / tmuxPanel 等工具标签依附的终端标签；关闭源标签时会被一并关闭。 */
+  /** portTraffic / processPanel / gpuProcess / tmuxPanel 等工具标签依附的终端标签；关闭源标签时会被一并关闭。 */
   sourceTabId?: string
   profileId: string
   sessionId: SessionId | null
@@ -77,6 +78,8 @@ interface SessionStore {
   openPortTrafficTab: (id: string, title: string) => void
   /** 在当前窗口打开依附于既有 SSH 会话的进程面板标签，不重复登录。 */
   openProcessPanelTab: (id: string, title: string) => void
+  /** 在当前窗口打开依附于既有 SSH 会话的 GPU 进程标签，不重复登录。 */
+  openGpuProcessTab: (id: string, title: string) => void
   /**
    * 打开 profile 的 Tmux 面板标签（连接树右键 / 终端工具条共用入口）。
    * 连接复用按方案 §3：优先复用当前活动终端标签的连接，其次第一个就绪的；
@@ -272,7 +275,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   duplicateTab: async (id, profiles) => {
     const tab = get().tabs.find((t) => t.id === id)
-    if (tab?.kind === 'portTraffic' || tab?.kind === 'processPanel' || tab?.kind === 'tmuxPanel') return
+    if (tab?.kind === 'portTraffic' || tab?.kind === 'processPanel' || tab?.kind === 'gpuProcess' || tab?.kind === 'tmuxPanel') return
     // 复制附着标签 = 对同一目标再附着一次（自带一条新连接，不共享原标签的通道）
     if (tab?.kind === 'tmuxAttach') {
       if (tab.targetId) await get().openTmuxAttachTab(tab.profileId, tab.targetId, tab.tmuxName)
@@ -289,11 +292,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const tab = get().tabs.find((t) => t.id === id)
     const closingIds = new Set<string>([id])
     if (tab?.kind === 'tmuxAttach') tmuxDetachedTabs.delete(id)
-    if (tab?.kind !== 'portTraffic' && tab?.kind !== 'processPanel' && tab?.kind !== 'tmuxPanel') {
+    if (tab?.kind !== 'portTraffic' && tab?.kind !== 'processPanel' && tab?.kind !== 'gpuProcess' && tab?.kind !== 'tmuxPanel') {
       for (const candidate of get().tabs) {
         if (
           (candidate.kind === 'portTraffic' ||
             candidate.kind === 'processPanel' ||
+            candidate.kind === 'gpuProcess' ||
             candidate.kind === 'tmuxPanel') &&
           candidate.sourceTabId === id
         ) {
@@ -309,7 +313,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     */
     set((s) => {
       const tabs = s.tabs.filter((t) => !closingIds.has(t.id))
-      const source = tab?.kind === 'processPanel' ? tabs.find((t) => t.id === tab.sourceTabId) : undefined
+      const source =
+        tab?.kind === 'processPanel' || tab?.kind === 'gpuProcess'
+          ? tabs.find((t) => t.id === tab.sourceTabId)
+          : undefined
       const activeTabId =
         s.activeTabId && closingIds.has(s.activeTabId)
           ? (source ?? tabs.at(-1))?.id ?? null
@@ -325,6 +332,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       if (tab.kind === 'processPanel') {
         await useProcessPanelStore.getState().stop(tab.sessionId).catch(() => {})
         useProcessPanelStore.getState().clear(tab.sessionId)
+        return
+      }
+      if (tab.kind === 'gpuProcess') {
+        await useGpuProcessStore.getState().stop(tab.sessionId).catch(() => {})
+        useGpuProcessStore.getState().clear(tab.sessionId)
         return
       }
       if (tab.kind === 'tmuxPanel') {
@@ -351,6 +363,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       usePortTrafficStore.getState().clear(tab.sessionId)
       await useProcessPanelStore.getState().stop(tab.sessionId).catch(() => {})
       useProcessPanelStore.getState().clear(tab.sessionId)
+      await useGpuProcessStore.getState().stop(tab.sessionId).catch(() => {})
+      useGpuProcessStore.getState().clear(tab.sessionId)
       // 借用型 tmux 面板随源终端级联移除时走不到自己的 close 分支 ——
       // 与 portTraffic / processPanel 同款，在这里一并停采集、清快照
       await useTmuxStore.getState().stop(tab.sessionId).catch(() => {})
@@ -366,6 +380,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     if (
       (selected?.kind === 'portTraffic' ||
         selected?.kind === 'processPanel' ||
+        selected?.kind === 'gpuProcess' ||
         selected?.kind === 'tmuxPanel') &&
       selected.sourceTabId
     ) {
@@ -389,6 +404,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     if (
       tab.kind === 'portTraffic' ||
       tab.kind === 'processPanel' ||
+      tab.kind === 'gpuProcess' ||
       (tab.kind === 'tmuxPanel' && !!tab.sourceTabId)
     ) {
       if (tab.sourceTabId) await get().reconnectTab(tab.sourceTabId)
@@ -510,7 +526,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   openPortTrafficTab: (id, title) => {
     const source = get().tabs.find((t) => t.id === id)
-    if (!source || source.kind === 'portTraffic' || source.kind === 'processPanel' || !source.sessionId) return
+    if (!source || source.kind === 'portTraffic' || source.kind === 'processPanel' || source.kind === 'gpuProcess' || !source.sessionId) return
     const existing = get().tabs.find(
       (t) => t.kind === 'portTraffic' && t.sourceTabId === source.id
     )
@@ -534,7 +550,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   openProcessPanelTab: (id, title) => {
     const source = get().tabs.find((t) => t.id === id)
-    if (!source || source.kind === 'portTraffic' || source.kind === 'processPanel' || !source.sessionId) return
+    if (!source || source.kind === 'portTraffic' || source.kind === 'processPanel' || source.kind === 'gpuProcess' || !source.sessionId) return
     const existing = get().tabs.find(
       (t) => t.kind === 'processPanel' && t.sourceTabId === source.id
     )
@@ -546,6 +562,30 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       ...source,
       id: crypto.randomUUID(),
       kind: 'processPanel',
+      sourceTabId: source.id,
+      title,
+      customTitle: undefined,
+      termId: null,
+      sftpOpen: false,
+      monitorOpen: false
+    }
+    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
+  },
+
+  openGpuProcessTab: (id, title) => {
+    const source = get().tabs.find((t) => t.id === id)
+    if (!source || source.kind === 'portTraffic' || source.kind === 'processPanel' || source.kind === 'gpuProcess' || !source.sessionId) return
+    const existing = get().tabs.find(
+      (t) => t.kind === 'gpuProcess' && t.sourceTabId === source.id
+    )
+    if (existing) {
+      set({ activeTabId: existing.id })
+      return
+    }
+    const tab: SessionTab = {
+      ...source,
+      id: crypto.randomUUID(),
+      kind: 'gpuProcess',
       sourceTabId: source.id,
       title,
       customTitle: undefined,

@@ -9,6 +9,7 @@ import { forgetSessionBaselines } from '../sftp/editBaselines'
 import { clearProbeCache } from '../sftp/packTransfer'
 import { monitorManager } from '../monitor/MonitorManager'
 import { portTrafficManager } from '../monitor/PortTrafficManager'
+import { gpuProcessManager } from '../monitor/GpuProcessManager'
 import { processPanelManager } from '../monitor/ProcessPanelManager'
 import { tmuxManager } from '../monitor/TmuxManager'
 import { forwardManager } from '../forward/ForwardManager'
@@ -55,6 +56,9 @@ class SshConnectionManager {
       })
       void portTrafficManager.reattach(conn.sessionId).catch((err: Error) => {
         log.warn(`restore port traffic failed: ${err.message}`)
+      })
+      void gpuProcessManager.reattach(conn.sessionId).catch((err: Error) => {
+        log.warn(`restore gpu process failed: ${err.message}`)
       })
       void processPanelManager.reattach(conn.sessionId).catch((err: Error) => {
         log.warn(`restore process panel failed: ${err.message}`)
@@ -155,6 +159,7 @@ class SshConnectionManager {
     forgetSessionBaselines(sessionId)
     monitorManager.stop(sessionId)
     portTrafficManager.stop(sessionId)
+    gpuProcessManager.stop(sessionId)
     processPanelManager.stop(sessionId)
     tmuxManager.stop(sessionId)
     forwardManager.stopForSession(sessionId)

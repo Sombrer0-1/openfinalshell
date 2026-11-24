@@ -159,6 +159,22 @@
     "note": "仅显示当前用户可见的活动 TCP 连接；上下行速率按相邻采样的内核字节计数估算。",
     "noteCountersUnavailable": "已显示当前用户可见的活动 TCP 端口和连接数；此服务器的 ss 未提供完整双向内核字节计数，无法可靠计算上下行速率。"
   },
+  "gpuProcess": {
+    "tab": "GPU",
+    "open": "查看占用",
+    "title": "GPU 进程",
+    "updated": "更新于 {{time}}",
+    "collecting": "正在采集 GPU 进程…",
+    "unsupported": "此服务器没有 nvidia-smi，无法查看每块 GPU 上的进程",
+    "failed": "GPU 进程采集失败",
+    "empty": "没有检测到 GPU",
+    "noProcess": "当前没有进程",
+    "pid": "PID",
+    "user": "用户",
+    "name": "进程",
+    "util": "占用",
+    "memory": "显存"
+  },
   "processPanel": {
     "tab": "进程",
     "open": "查看进程信息",

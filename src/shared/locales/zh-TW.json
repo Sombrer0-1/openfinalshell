@@ -163,6 +163,22 @@
     "note": "Only active TCP connections visible to the current server user are shown. Rates are estimated from consecutive kernel byte-counter samples.",
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
+  "gpuProcess": {
+    "tab": "GPU",
+    "open": "查看占用",
+    "title": "GPU 程序",
+    "updated": "更新於 {{time}}",
+    "collecting": "正在收集 GPU 程序…",
+    "unsupported": "此伺服器沒有 nvidia-smi，無法查看每張 GPU 上的程序",
+    "failed": "GPU 程序收集失敗",
+    "empty": "沒有偵測到 GPU",
+    "noProcess": "目前沒有程序",
+    "pid": "PID",
+    "user": "使用者",
+    "name": "程序",
+    "util": "占用",
+    "memory": "顯存"
+  },
   "processPanel": {
     "tab": "Processes",
     "open": "查看程序資訊",

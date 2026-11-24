@@ -24,7 +24,7 @@ function tabMenuItems(tab: SessionTab, t: (key: string) => string) {
   ]
   // 借用型工具标签（含 tmuxPanel）没有独立生命周期，只给关闭类操作。
   // tmuxAttach 保留完整菜单：重命名、复制（= 再附着一次）、重连（= 重新附着）都有意义。
-  if (tab.kind === 'portTraffic' || tab.kind === 'processPanel' || tab.kind === 'tmuxPanel') {
+  if (tab.kind === 'portTraffic' || tab.kind === 'processPanel' || tab.kind === 'gpuProcess' || tab.kind === 'tmuxPanel') {
     return closeItems
   }
   return [

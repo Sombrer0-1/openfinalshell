@@ -39,6 +39,8 @@ import type {
   MonitorSnapshot,
   MonitorState,
   MonitorStaticInfo,
+  GpuProcessSnapshot,
+  GpuProcessState,
   PortTrafficSnapshot,
   PortTrafficState,
   ProcessDetail,
@@ -322,6 +324,10 @@ export interface InvokeMap {
   'portTraffic:start': { args: [SessionId]; result: void }
   'portTraffic:stop': { args: [SessionId]; result: void }
 
+  // --- GPU 进程页（仅在打开对应标签时按需采集，按卡列出进程） ---
+  'gpuProcess:start': { args: [SessionId]; result: void }
+  'gpuProcess:stop': { args: [SessionId]; result: void }
+
   // --- 进程面板（仅在打开进程标签时按需采集；杀进程 / 详情走同一会话） ---
   'processPanel:start': { args: [SessionId]; result: void }
   'processPanel:stop': { args: [SessionId]; result: void }
@@ -472,6 +478,8 @@ export interface EventMap {
   'monitor:state': { sessionId: SessionId; state: MonitorState; error?: string }
   'portTraffic:data': { sessionId: SessionId; snapshot: PortTrafficSnapshot }
   'portTraffic:state': { sessionId: SessionId; state: PortTrafficState; error?: string }
+  'gpuProcess:data': { sessionId: SessionId; snapshot: GpuProcessSnapshot }
+  'gpuProcess:state': { sessionId: SessionId; state: GpuProcessState; error?: string }
   'processPanel:data': { sessionId: SessionId; snapshot: ProcessSnapshot }
   'processPanel:state': { sessionId: SessionId; state: ProcessPanelState; error?: string }
   'tmux:sessions': {
@@ -516,6 +524,7 @@ export const CHANNEL_PREFIXES = [
   'transfer:',
   'monitor:',
   'portTraffic:',
+  'gpuProcess:',
   'processPanel:',
   'tmux:',
   'forward:',
@@ -632,6 +641,8 @@ export const INVOKE_CHANNELS = channelSet<InvokeChannel>({
   'monitor:setInterval': true,
   'portTraffic:start': true,
   'portTraffic:stop': true,
+  'gpuProcess:start': true,
+  'gpuProcess:stop': true,
   'processPanel:start': true,
   'processPanel:stop': true,
   'processPanel:detail': true,
@@ -700,6 +711,8 @@ export const EVENT_CHANNELS = channelSet<EventChannel>({
   'monitor:state': true,
   'portTraffic:data': true,
   'portTraffic:state': true,
+  'gpuProcess:data': true,
+  'gpuProcess:state': true,
   'processPanel:data': true,
   'processPanel:state': true,
   'tmux:sessions': true,

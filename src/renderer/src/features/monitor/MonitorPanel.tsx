@@ -47,6 +47,7 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
   const start = useMonitorStore((s) => s.start)
   const openPortTrafficTab = useSessionStore((s) => s.openPortTrafficTab)
   const openProcessPanelTab = useSessionStore((s) => s.openProcessPanelTab)
+  const openGpuProcessTab = useSessionStore((s) => s.openGpuProcessTab)
   const [showCores, setShowCores] = useState(false)
   const sessionTitle = tab.customTitle ?? tab.title
 
@@ -166,7 +167,13 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
         {/* 内存 */}
         <MemCard snapshot={snapshot} accent={accent} />
 
-        {snapshot.gpus && snapshot.gpus.length > 0 && <GpuCard gpus={snapshot.gpus} accent={accent} />}
+        {snapshot.gpus && snapshot.gpus.length > 0 && (
+          <GpuCard
+            gpus={snapshot.gpus}
+            accent={accent}
+            onOpen={() => openGpuProcessTab(tab.id, `${sessionTitle} · ${t('gpuProcess.tab')}`)}
+          />
+        )}
 
         {/* 网络 */}
         <button
@@ -377,17 +384,31 @@ function GpuUtil({ gpu, accent, label }: { gpu: GpuSample; accent: string; label
   )
 }
 
-function GpuCard({ gpus, accent }: { gpus: GpuSample[]; accent: string }): React.JSX.Element {
+function GpuCard({
+  gpus,
+  accent,
+  onOpen
+}: {
+  gpus: GpuSample[]
+  accent: string
+  onOpen: () => void
+}): React.JSX.Element {
   const { t } = useTranslation()
   const memoryLabel = t('monitor.gpuMemory')
+  const hint = (
+    <span className={styles.cardActionHint}>
+      {t('gpuProcess.open')} <ChevronRight size={13} aria-hidden="true" />
+    </span>
+  )
   if (gpus.length === 1) {
     const gpu = gpus[0]
     return (
-      <div className={styles.card}>
-        <div className={styles.cardHead}>
+      <button type="button" className={`${styles.card} ${styles.clickableCard}`} onClick={onOpen}>
+        <span className={styles.cardHead}>
           <span className={styles.cardHeadTitle}>{t('monitor.gpu')}</span>
           {gpu.tempC != null && <span className={styles.subText}>{formatMeasure(gpu.tempC)}°C</span>}
-        </div>
+          {hint}
+        </span>
         <span className={styles.kvRow}>
           <span className={styles.kvValue} title={gpu.name}>
             {gpu.name}
@@ -396,14 +417,15 @@ function GpuCard({ gpus, accent }: { gpus: GpuSample[]; accent: string }): React
         <GpuUtil gpu={gpu} accent={accent} label={t('monitor.gpu')} />
         <GpuMemRows gpu={gpu} accent={accent} label={memoryLabel} />
         <GpuPower gpu={gpu} />
-      </div>
+      </button>
     )
   }
   return (
-    <div className={styles.card}>
-      <div className={styles.cardHead}>
+    <button type="button" className={`${styles.card} ${styles.clickableCard}`} onClick={onOpen}>
+      <span className={styles.cardHead}>
         <span className={styles.cardHeadTitle}>{t('monitor.gpu')}</span>
-      </div>
+        {hint}
+      </span>
       {gpus.map((gpu) => {
         const label = `${t('monitor.gpu')} ${gpu.index}`
         return (
@@ -432,7 +454,7 @@ function GpuCard({ gpus, accent }: { gpus: GpuSample[]; accent: string }): React
           </div>
         )
       })}
-    </div>
+    </button>
   )
 }
 

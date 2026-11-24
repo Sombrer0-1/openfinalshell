@@ -22,6 +22,8 @@ const openPortTrafficTab = vi.fn()
 const originalOpenPortTraffic = useSessionStore.getState().openPortTrafficTab
 const openProcessPanelTab = vi.fn()
 const originalOpenProcessPanel = useSessionStore.getState().openProcessPanelTab
+const openGpuProcessTab = vi.fn()
+const originalOpenGpuProcess = useSessionStore.getState().openGpuProcessTab
 function fill(label: string): HTMLElement { return screen.getByRole('progressbar', { name: label }).firstElementChild as HTMLElement }
 function mount(): void { container = render(<MonitorPanel tab={tab} onClose={() => {}} />).container }
 function update(next: MonitorSnapshot): void {
@@ -33,6 +35,7 @@ beforeEach(() => {
   graph.mockClear()
   openPortTrafficTab.mockClear()
   openProcessPanelTab.mockClear()
+  openGpuProcessTab.mockClear()
   snapshot = {
     ts: 1, uptimeSec: 900,
     cpu: { usagePct: 84.5, perCore: [0, 50, 79, 100], loadAvg: [43.09, 52.01, 54.58] },
@@ -47,7 +50,7 @@ beforeEach(() => {
     staticInfo: { [sessionId]: { hostname: 'server.example', distro: 'Ubuntu 22.04 LTS', kernel: '5.15.0', arch: 'x86_64', ips: ['192.0.2.1'], cpuCores: 4 } },
     state: {}
   })
-  useSessionStore.setState({ openPortTrafficTab, openProcessPanelTab })
+  useSessionStore.setState({ openPortTrafficTab, openProcessPanelTab, openGpuProcessTab })
   const history = historyOf(sessionId)
   history.rxBps.splice(0, history.rxBps.length, 100, 1024)
   history.txBps.splice(0, history.txBps.length, 200, 2048)
@@ -55,7 +58,11 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   useMonitorStore.getState().clear(sessionId)
-  useSessionStore.setState({ openPortTrafficTab: originalOpenPortTraffic, openProcessPanelTab: originalOpenProcessPanel })
+  useSessionStore.setState({
+    openPortTrafficTab: originalOpenPortTraffic,
+    openProcessPanelTab: originalOpenProcessPanel,
+    openGpuProcessTab: originalOpenGpuProcess
+  })
 })
 
 describe('compact monitor panel', () => {
@@ -152,6 +159,8 @@ describe('compact monitor panel', () => {
     expect(fill('显存').style.width).toBe('74.1%')
     expect(screen.getByText('17.8 GB / 24.0 GB')).toBeTruthy()
     expect(screen.getByText('320 W / 450 W')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /查看占用/ }))
+    expect(openGpuProcessTab).toHaveBeenCalledWith(tab.id, 'server · GPU')
   })
 
   it('lists each GPU without a second oversized percentage', () => {

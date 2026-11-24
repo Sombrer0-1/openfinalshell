@@ -14,6 +14,7 @@ import { registerSnippetIpc } from './ipc/snippet.ipc'
 import { registerSftpIpc } from './ipc/sftp.ipc'
 import { registerMonitorIpc } from './ipc/monitor.ipc'
 import { registerPortTrafficIpc } from './ipc/portTraffic.ipc'
+import { registerGpuProcessIpc } from './ipc/gpuProcess.ipc'
 import { registerProcessPanelIpc } from './ipc/processPanel.ipc'
 import { registerTmuxIpc } from './ipc/tmux.ipc'
 import { registerForwardIpc } from './ipc/forward.ipc'
@@ -26,6 +27,7 @@ import { registerSyncIpc } from './ipc/sync.ipc'
 import { registerRdpIpc } from './ipc/rdp.ipc'
 import { monitorManager } from './monitor/MonitorManager'
 import { portTrafficManager } from './monitor/PortTrafficManager'
+import { gpuProcessManager } from './monitor/GpuProcessManager'
 import { processPanelManager } from './monitor/ProcessPanelManager'
 import { tmuxManager } from './monitor/TmuxManager'
 import { forwardManager } from './forward/ForwardManager'
@@ -200,6 +202,7 @@ if (!ownsSingleInstanceLock) {
     registerSftpIpc()
     registerMonitorIpc()
     registerPortTrafficIpc()
+    registerGpuProcessIpc()
     registerProcessPanelIpc()
     registerTmuxIpc()
     registerForwardIpc()
@@ -242,6 +245,7 @@ if (!ownsSingleInstanceLock) {
       transferQueue.cancelAll()
       monitorManager.stopAll()
       portTrafficManager.stopAll()
+      gpuProcessManager.stopAll()
       processPanelManager.stopAll()
       tmuxManager.stopAll()
       forwardManager.stopAll()

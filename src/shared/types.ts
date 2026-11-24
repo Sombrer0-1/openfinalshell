@@ -889,6 +889,34 @@ export interface ProcessSnapshot {
 
 export type ProcessPanelState = 'running' | 'failed' | 'unsupported' | 'stopped'
 
+/** 某块 GPU 上的一个进程。缺失的占用或显存是 null，不是 0。 */
+export interface GpuProcess {
+  pid: number
+  /** 空串表示这一拍没有查到用户，界面显示为破折号。 */
+  user: string
+  name: string
+  utilPct: number | null
+  memBytes: number | null
+}
+
+/** 一块 GPU 以及正占用它的进程。进程按卡分组，同一进程占多卡时在每张卡下各出现一次。 */
+export interface GpuProcessGroup {
+  index: number
+  name: string
+  utilPct: number | null
+  memUsedMiB: number | null
+  memTotalMiB: number | null
+  tempC: number | null
+  processes: GpuProcess[]
+}
+
+export interface GpuProcessSnapshot {
+  ts: number
+  gpus: GpuProcessGroup[]
+}
+
+export type GpuProcessState = 'running' | 'failed' | 'unsupported' | 'stopped'
+
 /** 选中进程后按需拉取的详情（cwd / env / exe）。 */
 export interface ProcessDetail {
   pid: number

@@ -74,6 +74,11 @@ export const PORT_TRAFFIC_INTERVAL_MS = 1000
 export const PORT_TRAFFIC_MAX_FRAME_BYTES = 256 * 1024
 export const PORT_TRAFFIC_FRAME_TIMEOUT_MS = 5000
 
+/** GPU 进程页自己一条通道。pmon 要采两拍，间隔留出这一拍的时间。 */
+export const GPU_PROCESS_INTERVAL_MS = 3000
+export const GPU_PROCESS_FRAME_TIMEOUT_MS = 8000
+export const GPU_PROCESS_MAX_FRAME_BYTES = 512 * 1024
+
 /**
  * 编辑远端文件的单文件上限。**8MB，从 2MB 放宽而来，判据是量出来的。**
  *

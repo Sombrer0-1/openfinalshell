@@ -163,6 +163,22 @@
     "note": "Only active TCP connections visible to the current server user are shown. Rates are estimated from consecutive kernel byte-counter samples.",
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
+  "gpuProcess": {
+    "tab": "GPU",
+    "open": "使用状況を見る",
+    "title": "GPU プロセス",
+    "updated": "更新 {{time}}",
+    "collecting": "GPU プロセスを収集しています…",
+    "unsupported": "このサーバーには nvidia-smi がないため、GPU ごとのプロセスを表示できません",
+    "failed": "GPU プロセスの収集に失敗しました",
+    "empty": "GPU がありません",
+    "noProcess": "プロセスはありません",
+    "pid": "PID",
+    "user": "ユーザー",
+    "name": "プロセス",
+    "util": "使用率",
+    "memory": "ビデオメモリ"
+  },
   "processPanel": {
     "tab": "Processes",
     "open": "プロセスを表示",

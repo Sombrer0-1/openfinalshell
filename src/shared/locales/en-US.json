@@ -159,6 +159,22 @@
     "note": "Only active TCP connections visible to the current server user are shown. Rates are estimated from consecutive kernel byte-counter samples.",
     "noteCountersUnavailable": "Active TCP ports and connection counts visible to the current server user are shown. This server's ss does not provide complete bidirectional kernel byte counters, so receive and send rates cannot be calculated reliably."
   },
+  "gpuProcess": {
+    "tab": "GPU",
+    "open": "View usage",
+    "title": "GPU processes",
+    "updated": "Updated {{time}}",
+    "collecting": "Collecting GPU processes…",
+    "unsupported": "This server has no nvidia-smi, so per-GPU processes are unavailable",
+    "failed": "GPU process collection failed",
+    "empty": "No GPU detected",
+    "noProcess": "No processes",
+    "pid": "PID",
+    "user": "User",
+    "name": "Process",
+    "util": "Usage",
+    "memory": "VRAM"
+  },
   "processPanel": {
     "tab": "Processes",
     "open": "View processes",

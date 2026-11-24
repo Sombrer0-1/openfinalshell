@@ -163,6 +163,22 @@
     "note": "Only active TCP connections visible to the current server user are shown. Rates are estimated from consecutive kernel byte-counter samples.",
     "noteCountersUnavailable": "Active TCP ports and connection counts are shown, but this server does not provide complete bidirectional byte counters."
   },
+  "gpuProcess": {
+    "tab": "GPU",
+    "open": "사용량 보기",
+    "title": "GPU 프로세스",
+    "updated": "업데이트 {{time}}",
+    "collecting": "GPU 프로세스를 수집하는 중…",
+    "unsupported": "이 서버에 nvidia-smi가 없어 GPU별 프로세스를 볼 수 없습니다",
+    "failed": "GPU 프로세스 수집에 실패했습니다",
+    "empty": "감지된 GPU가 없습니다",
+    "noProcess": "프로세스 없음",
+    "pid": "PID",
+    "user": "사용자",
+    "name": "프로세스",
+    "util": "사용률",
+    "memory": "VRAM"
+  },
   "processPanel": {
     "tab": "Processes",
     "open": "프로세스 보기",

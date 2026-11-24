@@ -19,6 +19,7 @@ import { scopedLogger } from '../utils/logger'
 import { checkLatestRelease } from './manualUpdateCheck'
 import { instanceCoordinator } from '../instances/service'
 import { portTrafficManager } from '../monitor/PortTrafficManager'
+import { gpuProcessManager } from '../monitor/GpuProcessManager'
 import { lanSyncManager } from '../lansync/LanSyncManager'
 import { requestEditorCloseForQuit } from '../editorWindow'
 import { currentInstance } from '../instance'
@@ -229,6 +230,7 @@ export async function installUpdate(force: boolean): Promise<UpdateInstallResult
     transferQueue.cancelAll()
     monitorManager.stopAll()
     portTrafficManager.stopAll()
+    gpuProcessManager.stopAll()
     lanSyncManager.stopAll()
     forwardManager.stopAll()
     sshManager.closeAll()

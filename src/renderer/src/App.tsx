@@ -15,6 +15,7 @@ import { StartupNoticeModal } from '@/features/onboarding/StartupNoticeModal'
 import { useTransferStore, wireTransferEvents } from '@/stores/useTransferStore'
 import { wireMonitorEvents } from '@/stores/useMonitorStore'
 import { wirePortTrafficEvents } from '@/stores/usePortTrafficStore'
+import { wireGpuProcessEvents } from '@/stores/useGpuProcessStore'
 import { wireProcessPanelEvents } from '@/stores/useProcessPanelStore'
 import { wireTmuxEvents } from '@/stores/useTmuxStore'
 import { wireForwardEvents } from '@/stores/useForwardStore'
@@ -38,6 +39,7 @@ export default function App(): React.JSX.Element {
     void useTransferStore.getState().load()
     wireMonitorEvents()
     wirePortTrafficEvents()
+    wireGpuProcessEvents()
     wireProcessPanelEvents()
     wireTmuxEvents()
     wireForwardEvents()

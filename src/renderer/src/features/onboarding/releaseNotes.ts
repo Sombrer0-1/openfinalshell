@@ -17,6 +17,21 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.30.32',
+    items: [
+      {
+        type: 'feat',
+        zh: '服务器监控显示 NVIDIA GPU 的占用、显存、温度和功耗',
+        en: 'Show NVIDIA GPU utilization, memory, temperature, and power on the server monitor'
+      },
+      {
+        type: 'feat',
+        zh: '点击 GPU 卡片可按每张卡查看占用它的进程、用户和显存',
+        en: 'Open a per-GPU process view from the GPU card, including each process user and VRAM'
+      }
+    ]
+  },
+  {
     version: '0.30.31',
     items: [
       {

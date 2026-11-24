@@ -9,6 +9,7 @@ import type {
   ForwardRule,
   ForwardRuntime,
   ProfileDraft,
+  GpuProcessSnapshot,
   PortTrafficSnapshot,
   ProcessSnapshot,
   ProcessDetail,
@@ -241,6 +242,7 @@ export function createMockOfs(): OfsApi {
   // --- 假监控：周期推送带随机波动的快照 ---
   const monitorTimers = new Map<string, ReturnType<typeof setInterval>>()
   const portTrafficTimers = new Map<string, ReturnType<typeof setInterval>>()
+  const gpuProcessTimers = new Map<string, ReturnType<typeof setInterval>>()
   const processPanelTimers = new Map<string, ReturnType<typeof setInterval>>()
   const tmuxTimers = new Map<string, ReturnType<typeof setInterval>>()
   /** 同一配置的 SSH 连接共享远端 tmux 状态；停止采集不影响远端会话。 */
@@ -300,6 +302,42 @@ export function createMockOfs(): OfsApi {
     emit('processPanel:state', { sessionId, state: 'running' })
     push()
     processPanelTimers.set(sessionId, setInterval(push, 2000))
+  }
+
+  function startMockGpuProcess(sessionId: string): void {
+    if (gpuProcessTimers.has(sessionId)) return
+    const push = (): void => {
+      const snapshot: GpuProcessSnapshot = {
+        ts: Date.now(),
+        gpus: [
+          {
+            index: 0,
+            name: 'NVIDIA GeForce RTX 4090',
+            utilPct: 86,
+            memUsedMiB: 18000,
+            memTotalMiB: 24564,
+            tempC: 71,
+            processes: [
+              { pid: 4201, user: 'demo', name: 'python', utilPct: 62, memBytes: 12_884_901_888 },
+              { pid: 8812, user: 'root', name: 'Xorg', utilPct: 4, memBytes: null }
+            ]
+          },
+          {
+            index: 1,
+            name: 'NVIDIA GeForce RTX 4090',
+            utilPct: 41,
+            memUsedMiB: 8200,
+            memTotalMiB: 24564,
+            tempC: 64,
+            processes: [{ pid: 4201, user: 'demo', name: 'python', utilPct: 38, memBytes: 6_442_450_944 }]
+          }
+        ]
+      }
+      emit('gpuProcess:data', { sessionId, snapshot })
+    }
+    emit('gpuProcess:state', { sessionId, state: 'running' })
+    push()
+    gpuProcessTimers.set(sessionId, setInterval(push, 3000))
   }
 
   function startMockPortTraffic(sessionId: string): void {
@@ -598,7 +636,7 @@ export function createMockOfs(): OfsApi {
     },
     'app:getVersions': () => ({ app: '0.1.0-mock', electron: 'browser', node: '-', chrome: '-' }),
     // 浏览器 mock 里默认当"更新到当前版本"，方便直接预览更新弹窗
-    'app:getStartupNotice': () => ({ kind: 'update', fromVersion: '0.0.0', toVersion: '0.30.31' }),
+    'app:getStartupNotice': () => ({ kind: 'update', fromVersion: '0.0.0', toVersion: '0.30.32' }),
     // 浏览器 mock 没有主进程语言包，任何语言都回 en-US（UI 调试足够）
     'i18n:bundle': () => enUSLocale as unknown as Record<string, unknown>,
     // 浏览器里没有原生对话框，返回假路径让传输流程可走通
@@ -1094,6 +1132,14 @@ export function createMockOfs(): OfsApi {
       if (timer) clearInterval(timer)
       portTrafficTimers.delete(id)
       emit('portTraffic:state', { sessionId: id, state: 'stopped' })
+    },
+    'gpuProcess:start': (sessionId: never) => startMockGpuProcess(sessionId as unknown as string),
+    'gpuProcess:stop': (sessionId: never) => {
+      const id = sessionId as unknown as string
+      const timer = gpuProcessTimers.get(id)
+      if (timer) clearInterval(timer)
+      gpuProcessTimers.delete(id)
+      emit('gpuProcess:state', { sessionId: id, state: 'stopped' })
     },
     'processPanel:start': (sessionId: never) => startMockProcessPanel(sessionId as unknown as string),
     'processPanel:stop': (sessionId: never) => {
