@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import '@/i18n'
 import { DEFAULT_SETTINGS } from '@shared/constants'
-import type { MonitorSnapshot, SessionId } from '@shared/types'
+import type { GpuSample, MonitorSnapshot, SessionId } from '@shared/types'
 import { MonitorPanel } from '@/features/monitor/MonitorPanel'
 import { historyOf, useMonitorStore } from '@/stores/useMonitorStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
@@ -39,7 +39,7 @@ beforeEach(() => {
     mem: { totalKb: 1000, usedKb: 647, availableKb: 353, swapTotalKb: 200, swapUsedKb: 148 },
     net: [{ iface: 'eth0', rxBps: 1024, txBps: 2048, rxTotalBytes: 10000, txTotalBytes: 20000 }],
     diskFs: [{ fs: '/dev/sda1', mount: '/', totalKb: 1000, usedKb: 300, usePct: 30 }],
-    diskIo: [], conns: null, directLatencyMs: 12, connectionLatencyMs: 21
+    diskIo: [], gpus: null, conns: null, directLatencyMs: 12, connectionLatencyMs: 21
   }
   useSettingsStore.setState({ settings: structuredClone(DEFAULT_SETTINGS) })
   useMonitorStore.setState({
@@ -129,5 +129,66 @@ describe('compact monitor panel', () => {
     expect(network.textContent).toContain('2.00 KB')
     fireEvent.click(network)
     expect(openPortTrafficTab).toHaveBeenCalledWith(tab.id, expect.stringContaining('server'))
+  })
+
+  const rtx: GpuSample = {
+    index: 0,
+    name: 'NVIDIA GeForce RTX 4090',
+    utilPct: 87,
+    memUsedMiB: 18200,
+    memTotalMiB: 24564,
+    tempC: 42,
+    powerW: 320,
+    powerLimitW: 450
+  }
+
+  it('shows one GPU with utilization, memory, temperature and power', () => {
+    mount()
+    update({ ...snapshot, gpus: [rtx] })
+    expect(screen.getByText('NVIDIA GeForce RTX 4090')).toBeTruthy()
+    expect(screen.getByText('42°C')).toBeTruthy()
+    expect(screen.getByText('87.0')).toBeTruthy()
+    expect(fill('GPU').style.width).toBe('87%')
+    expect(fill('显存').style.width).toBe('74.1%')
+    expect(screen.getByText('17.8 GB / 24.0 GB')).toBeTruthy()
+    expect(screen.getByText('320 W / 450 W')).toBeTruthy()
+  })
+
+  it('lists each GPU without a second oversized percentage', () => {
+    mount()
+    update({
+      ...snapshot,
+      gpus: [rtx, { ...rtx, index: 1, name: 'NVIDIA A100', utilPct: 12, tempC: 61, powerW: 50, powerLimitW: null }]
+    })
+    expect(screen.getByText('0 NVIDIA GeForce RTX 4090')).toBeTruthy()
+    expect(screen.getByText('1 NVIDIA A100')).toBeTruthy()
+    expect(fill('GPU 0').style.width).toBe('87%')
+    expect(fill('GPU 1').style.width).toBe('12%')
+    expect(screen.getByText('50 W')).toBeTruthy()
+    expect(screen.queryByText('87.0')).toBeNull()
+  })
+
+  it('hides the card when no GPU was sampled', () => {
+    mount()
+    expect(screen.queryByText('GPU')).toBeNull()
+    update({ ...snapshot, gpus: [] })
+    expect(screen.queryByText('GPU')).toBeNull()
+  })
+
+  it('does not draw missing utilization, power or temperature as zero', () => {
+    mount()
+    update({ ...snapshot, gpus: [{ ...rtx, utilPct: null, tempC: null, powerW: null, powerLimitW: null }] })
+    expect(screen.getByText('不可用')).toBeTruthy()
+    expect(screen.queryByRole('progressbar', { name: 'GPU' })).toBeNull()
+    expect(screen.queryByText('功耗')).toBeNull()
+    expect(screen.queryByText(/°C/)).toBeNull()
+  })
+
+  it('colors GPU utilization like the other usage bars', () => {
+    mount()
+    update({ ...snapshot, gpus: [{ ...rtx, utilPct: 79 }] })
+    expect(fill('GPU').style.background).toBe('var(--ofs-warning)')
+    update({ ...snapshot, gpus: [{ ...rtx, utilPct: 91 }] })
+    expect(fill('GPU').style.background).toBe('var(--ofs-error)')
   })
 })

@@ -15,6 +15,7 @@ import {
   parseLoadAvg,
   parseMeminfo,
   parseNetDev,
+  parseNvidiaSmi,
   parseProcStat,
   parseSockstat,
   parseStaticInfo,
@@ -66,6 +67,8 @@ export class MonitorCollector {
   private failures = 0
   private intervalMs = MONITOR_DEFAULT_INTERVAL_MS
   private hasTimeoutCmd = false
+  /** 静态帧探测到 nvidia-smi。没有它时周期帧不跑 GPU 查询。 */
+  private hasNvidiaSmi = false
   /**
    * 最近一次帧首哨兵回显的往返毫秒。帧首那句 `echo BEGIN` 服务器收到即回显，
    * 写入→首见 BEGIN ≈ 一个 SSH 通道往返 —— 不必像 pixshell 那样反复对 22 端口
@@ -135,6 +138,7 @@ export class MonitorCollector {
       return null
     }
     this.hasTimeoutCmd = (sections.get('HASTIMEOUT') ?? '').includes('yes')
+    this.hasNvidiaSmi = (sections.get('HASGPU') ?? '').includes('nvidia')
     return parseStaticInfo({
       uname,
       hostname: sections.get('HOSTNAME') ?? '',
@@ -206,9 +210,11 @@ export class MonitorCollector {
     const seq = this.seq
     const withDf = seq - this.lastDfTick >= MONITOR_DF_EVERY_N_TICKS
     if (withDf) this.lastDfTick = seq
+    // df 与 nvidia-smi 各自最多占 3 秒和 2 秒。叠在同一帧会顶到 5 秒帧超时。
+    const withGpu = this.hasNvidiaSmi && !withDf
 
     void this.request(
-      buildFrame(seq, { withDf, hasTimeout: this.hasTimeoutCmd }),
+      buildFrame(seq, { withDf, withGpu, hasTimeout: this.hasTimeoutCmd }),
       seq
     ).then((body) => {
       if (body === null) {
@@ -250,6 +256,7 @@ export class MonitorCollector {
     const dfText = sections.get('DF')
     if (dfText !== undefined) this.lastDiskFs = parseDf(dfText)
     const tcpStText = sections.get('TCPST')
+    const gpuText = sections.get('GPU')
 
     return {
       ts,
@@ -279,6 +286,7 @@ export class MonitorCollector {
         }
       }),
       diskFs: dfText !== undefined ? this.lastDiskFs : null,
+      gpus: gpuText !== undefined ? parseNvidiaSmi(gpuText) : null,
       conns: parseSockstat(sections.get('SOCK') ?? ''),
       // best-effort：这一段只在低频 tick 出现，缺失时给 undefined 让 renderer 沿用上次值
       tcpStates: tcpStText ? parseTcpStates(tcpStText) : undefined,

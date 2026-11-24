@@ -3,6 +3,8 @@
  * 计数器类指标（CPU jiffies / 网卡字节 / 磁盘扇区）需要两帧差分，由 diff* 函数完成。
  */
 
+import type { GpuSample } from '@shared/types'
+
 // ---------------- /proc/stat ----------------
 export interface CpuTimes {
   /** 全部字段之和 */
@@ -314,4 +316,59 @@ export function parseStaticInfo(raw: StaticInfoRaw): {
     cpuCores: Math.max(1, Number(raw.nproc.trim()) || 1),
     ips
   }
+}
+
+// ---------------- nvidia-smi CSV ----------------
+function splitCsv(line: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quoted) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else quoted = false
+      } else cur += ch
+    } else if (ch === '"') quoted = true
+    else if (ch === ',') {
+      out.push(cur.trim())
+      cur = ''
+    } else cur += ch
+  }
+  out.push(cur.trim())
+  return out
+}
+
+/** `[N/A]`、`[Not Supported]` 不能当成 0。 */
+function nvidiaMetric(raw: string | undefined): number | null {
+  if (!raw || /N\/A|Not Supported/i.test(raw)) return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+}
+
+/** `nvidia-smi --format=csv,noheader,nounits`。第一列不是序号的行丢掉。 */
+export function parseNvidiaSmi(text: string): GpuSample[] {
+  const out: GpuSample[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    const fields = splitCsv(line)
+    const index = Number(fields[0])
+    if (!Number.isInteger(index) || index < 0) continue
+    const util = nvidiaMetric(fields[2])
+    out.push({
+      index,
+      name: fields[1] || `GPU ${index}`,
+      utilPct: util == null ? null : Math.min(100, Math.max(0, Number(util.toFixed(1)))),
+      memUsedMiB: nvidiaMetric(fields[3]),
+      memTotalMiB: nvidiaMetric(fields[4]),
+      tempC: nvidiaMetric(fields[5]),
+      powerW: nvidiaMetric(fields[6]),
+      powerLimitW: nvidiaMetric(fields[7])
+    })
+  }
+  return out
 }

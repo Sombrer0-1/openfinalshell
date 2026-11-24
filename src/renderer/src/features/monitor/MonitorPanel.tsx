@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Empty } from 'antd'
 import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { MonitorSnapshot } from '@shared/types'
+import type { GpuSample, MonitorSnapshot } from '@shared/types'
 import { historyOf, useMonitorStore } from '@/stores/useMonitorStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useSessionStore } from '@/stores/useSessionStore'
@@ -166,6 +166,8 @@ export function MonitorPanel({ tab, onClose }: Props): React.JSX.Element {
         {/* 内存 */}
         <MemCard snapshot={snapshot} accent={accent} />
 
+        {snapshot.gpus && snapshot.gpus.length > 0 && <GpuCard gpus={snapshot.gpus} accent={accent} />}
+
         {/* 网络 */}
         <button
           type="button"
@@ -321,6 +323,116 @@ function Kv({ k, v }: { k: string; v: string }): React.JSX.Element {
         {v}
       </span>
     </span>
+  )
+}
+
+function formatMeasure(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function gpuMemPct(gpu: GpuSample): number | null {
+  if (gpu.memUsedMiB == null || gpu.memTotalMiB == null || gpu.memTotalMiB <= 0) return null
+  return Number(((gpu.memUsedMiB / gpu.memTotalMiB) * 100).toFixed(1))
+}
+
+function GpuMemRows({ gpu, accent, label }: { gpu: GpuSample; accent: string; label: string }): React.JSX.Element | null {
+  const pct = gpuMemPct(gpu)
+  if (pct == null || gpu.memUsedMiB == null || gpu.memTotalMiB == null) return null
+  const used = formatBytes(gpu.memUsedMiB * 1024 * 1024)
+  const total = formatBytes(gpu.memTotalMiB * 1024 * 1024)
+  return (
+    <>
+      <span className={styles.kvRow}>
+        <span className={styles.kvKey}>{label}</span>
+        <span className={styles.subText}>
+          {used} / {total}
+        </span>
+      </span>
+      <UsageBar label={label} pct={pct} color={usageColor(pct, accent)} />
+    </>
+  )
+}
+
+function GpuPower({ gpu }: { gpu: GpuSample }): React.JSX.Element | null {
+  const { t } = useTranslation()
+  if (gpu.powerW == null) return null
+  const draw = `${formatMeasure(gpu.powerW)} W`
+  const value = gpu.powerLimitW == null ? draw : `${draw} / ${formatMeasure(gpu.powerLimitW)} W`
+  return <Kv k={t('monitor.gpuPower')} v={value} />
+}
+
+function GpuUtil({ gpu, accent, label }: { gpu: GpuSample; accent: string; label: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  if (gpu.utilPct == null) {
+    return <div className={styles.latencyUnavailable}>{t('monitor.gpuUnavailable')}</div>
+  }
+  return (
+    <>
+      <div className={styles.bigNumber}>
+        {gpu.utilPct.toFixed(1)}
+        <span className={styles.unit}>%</span>
+      </div>
+      <UsageBar label={label} pct={gpu.utilPct} color={usageColor(gpu.utilPct, accent)} />
+    </>
+  )
+}
+
+function GpuCard({ gpus, accent }: { gpus: GpuSample[]; accent: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  const memoryLabel = t('monitor.gpuMemory')
+  if (gpus.length === 1) {
+    const gpu = gpus[0]
+    return (
+      <div className={styles.card}>
+        <div className={styles.cardHead}>
+          <span className={styles.cardHeadTitle}>{t('monitor.gpu')}</span>
+          {gpu.tempC != null && <span className={styles.subText}>{formatMeasure(gpu.tempC)}°C</span>}
+        </div>
+        <span className={styles.kvRow}>
+          <span className={styles.kvValue} title={gpu.name}>
+            {gpu.name}
+          </span>
+        </span>
+        <GpuUtil gpu={gpu} accent={accent} label={t('monitor.gpu')} />
+        <GpuMemRows gpu={gpu} accent={accent} label={memoryLabel} />
+        <GpuPower gpu={gpu} />
+      </div>
+    )
+  }
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <span className={styles.cardHeadTitle}>{t('monitor.gpu')}</span>
+      </div>
+      {gpus.map((gpu) => {
+        const label = `${t('monitor.gpu')} ${gpu.index}`
+        return (
+          <div key={gpu.index} style={{ marginBottom: 6 }}>
+            <span className={styles.kvRow}>
+              <span className={styles.kvValue} title={gpu.name}>
+                {gpu.index} {gpu.name}
+              </span>
+              {gpu.tempC != null && <span className={styles.subText}>{formatMeasure(gpu.tempC)}°C</span>}
+            </span>
+            {gpu.utilPct == null ? (
+              <div className={styles.latencyUnavailable}>{t('monitor.gpuUnavailable')}</div>
+            ) : (
+              <div className={styles.coreItem}>
+                <UsageBar
+                  label={label}
+                  pct={gpu.utilPct}
+                  color={usageColor(gpu.utilPct, accent)}
+                  className={styles.coreBar}
+                />
+                <span style={{ width: 36, textAlign: 'right' }}>{gpu.utilPct.toFixed(0)}%</span>
+              </div>
+            )}
+            <GpuMemRows gpu={gpu} accent={accent} label={`${memoryLabel} ${gpu.index}`} />
+            <GpuPower gpu={gpu} />
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

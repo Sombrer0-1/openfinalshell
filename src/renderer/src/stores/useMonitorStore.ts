@@ -115,11 +115,12 @@ export function wireMonitorEvents(): void {
   ofs.on('monitor:data', ({ sessionId, snapshot }) => {
     pushHistory(sessionId, snapshot)
     useMonitorStore.setState((s) => {
-      // df 每 5 tick 才采一次，其余帧沿用上次的值。
+      // df 与 nvidia-smi 都不是每帧都有，缺段时沿用上次的值。
       const prev = s.latest[sessionId]
       const merged: MonitorSnapshot = {
         ...snapshot,
         diskFs: snapshot.diskFs ?? prev?.diskFs ?? null,
+        gpus: snapshot.gpus ?? prev?.gpus ?? null,
         // TCP 状态明细同理每 5 帧才有；不沿用的话明细行会每 5 帧闪一次。
         // conns 反过来每帧都有，不需要沿用（真的是 null 就该显示"没有"）。
         tcpStates: snapshot.tcpStates ?? prev?.tcpStates

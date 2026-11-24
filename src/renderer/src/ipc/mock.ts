@@ -373,6 +373,18 @@ export function createMockOfs(): OfsApi {
           diskIo: [
             { dev: 'sda', readBps: Math.round(wave(10, 10) * 100000), writeBps: Math.round(wave(6, 6) * 80000) }
           ],
+          gpus: [
+            {
+              index: 0,
+              name: 'NVIDIA GeForce RTX 4090',
+              utilPct: Number(wave(62, 30).toFixed(1)),
+              memUsedMiB: Math.round(24564 * (wave(70, 15) / 100)),
+              memTotalMiB: 24564,
+              tempC: Math.round(wave(68, 12)),
+              powerW: Math.round(wave(55, 25) * 4),
+              powerLimitW: 450
+            }
+          ],
           // conns 每 tick 都有（sockstat 是 O(1)），明细跟 df 同档低频
           conns: {
             socketsUsed: 330 + Math.round(wave(20, 18)),

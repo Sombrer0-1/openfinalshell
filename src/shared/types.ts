@@ -780,6 +780,18 @@ export interface MonitorStaticInfo {
   ips: string[]
 }
 
+/** 一块 NVIDIA GPU 的一次 nvidia-smi 采样。缺失的传感器是 null，不是 0。 */
+export interface GpuSample {
+  index: number
+  name: string
+  utilPct: number | null
+  memUsedMiB: number | null
+  memTotalMiB: number | null
+  tempC: number | null
+  powerW: number | null
+  powerLimitW: number | null
+}
+
 export interface MonitorSnapshot {
   ts: number
   uptimeSec: number
@@ -795,6 +807,11 @@ export interface MonitorSnapshot {
   /** 非 df tick 为 null（磁盘容量每 5 tick 采一次） */
   diskFs: Array<{ fs: string; mount: string; totalKb: number; usedKb: number; usePct: number }> | null
   diskIo: Array<{ dev: string; readBps: number; writeBps: number }>
+  /**
+   * nvidia-smi 结果。本帧没查（没有 nvidia-smi，或这一帧在跑 df）为 null，渲染层沿用上一帧。
+   * 查过但没有卡，或命令被 timeout 杀掉、输出为空，为 []。
+   */
+  gpus: GpuSample[] | null
   /**
    * 连接/套接字计数。每 tick 都采（读 /proc/net/sockstat 是 O(1)，与连接数无关）；
    * 文件缺失（非 Linux、极简容器）为 null。

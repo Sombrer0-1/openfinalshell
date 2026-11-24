@@ -20,7 +20,8 @@ export const SECTIONS = [
   'DISKIO',
   'SOCK',
   'DF',
-  'TCPST'
+  'TCPST',
+  'GPU'
 ] as const
 export type SectionName = (typeof SECTIONS)[number]
 
@@ -38,6 +39,10 @@ const TCP_STATE_AWK =
   `awk 'FNR>1{c[$4]++} END{for(k in c) printf "%s %d\\n", k, c[k]}' ` +
   '/proc/net/tcp /proc/net/tcp6'
 
+/** 一次查询、固定列。utilization.memory 是显存控制器繁忙度，不是显存占用，所以不取。 */
+const NVIDIA_SMI =
+  'nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits'
+
 /**
  * 一个采集帧：哨兵行界定输出范围，防 bashrc 输出/欢迎语污染解析。
  * 磁盘容量和 TCP 状态按固定间隔采集，避免每帧都跑较重的命令。
@@ -45,7 +50,7 @@ const TCP_STATE_AWK =
  */
 export function buildFrame(
   seq: number,
-  opts: { withDf: boolean; hasTimeout: boolean }
+  opts: { withDf: boolean; withGpu: boolean; hasTimeout: boolean }
 ): string {
   const dfCmd = opts.hasTimeout ? 'timeout 3 df -kP' : 'df -kP'
   const lines = [
@@ -76,6 +81,10 @@ export function buildFrame(
       `${opts.hasTimeout ? 'timeout 3 ' : ''}${TCP_STATE_AWK} 2>/dev/null`
     )
   }
+  if (opts.withGpu) {
+    const gpuCmd = opts.hasTimeout ? `timeout 2 ${NVIDIA_SMI}` : NVIDIA_SMI
+    lines.push(`echo "${SENTINEL.section('GPU')}"`, `${gpuCmd} 2>/dev/null`)
+  }
   lines.push(`echo "${SENTINEL.end(seq)}"`)
   return `${lines.join('\n')}\n`
 }
@@ -96,6 +105,8 @@ export function buildStaticFrame(): string {
     'ip -o -4 addr 2>/dev/null || ifconfig 2>/dev/null',
     `echo "${SENTINEL.section('HASTIMEOUT')}"`,
     'command -v timeout >/dev/null 2>&1 && echo yes || echo no',
+    `echo "${SENTINEL.section('HASGPU')}"`,
+    'command -v nvidia-smi >/dev/null 2>&1 && echo nvidia || echo no',
     `echo "${SENTINEL.end(0)}"`
   ].join('\n') + '\n'
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildStaticFrame, splitSections } from '../../src/main/monitor/script'
+import { buildFrame, buildStaticFrame, splitSections } from '../../src/main/monitor/script'
 
 describe('监控采集脚本', () => {
   it('段名只能是大写字母 —— splitSections 的正则认不出带下划线/数字的段名', () => {
@@ -18,5 +18,18 @@ describe('监控采集脚本', () => {
     for (const name of names) {
       expect(sections.has(name), `section ${name} 应能被切出`).toBe(true)
     }
+  })
+
+  it('只有 withGpu 时才跑 nvidia-smi，且不取 utilization.memory', () => {
+    const off = buildFrame(2, { withDf: false, withGpu: false, hasTimeout: true })
+    expect(off).not.toContain('nvidia-smi')
+    const on = buildFrame(2, { withDf: false, withGpu: true, hasTimeout: true })
+    expect(on).toContain('@@OFS:GPU@@')
+    expect(on).toContain('timeout 2 nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total')
+    expect(on).not.toContain('utilization.memory')
+    const bare = buildFrame(3, { withDf: false, withGpu: true, hasTimeout: false })
+    expect(bare).toContain('\nnvidia-smi --query-gpu=')
+    expect(bare).not.toContain('timeout 2')
+    expect(buildStaticFrame()).toContain('@@OFS:HASGPU@@')
   })
 })

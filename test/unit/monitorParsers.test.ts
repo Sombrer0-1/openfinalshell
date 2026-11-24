@@ -7,6 +7,7 @@ import {
   parseLoadAvg,
   parseMeminfo,
   parseNetDev,
+  parseNvidiaSmi,
   parseProcStat,
   parseSockstat,
   parseStaticInfo,
@@ -288,5 +289,45 @@ describe('parseTcpStates', () => {
 
   it('表头没被 FNR>1 跳掉的情况不会伪造出状态（st 不是十六进制数字对）', () => {
     expect(parseTcpStates('st 2\n01 7')).toEqual({ ESTABLISHED: 7 })
+  })
+})
+
+const NVIDIA_SMI = `0, NVIDIA GeForce RTX 4090, 87, 18200, 24564, 42, 320.0, 450
+1, "NVIDIA A100, SXM4", [N/A], [Not Supported], 81920, [N/A], 35.2, [N/A]
+NVIDIA-SMI 550.54.14`
+
+describe('parseNvidiaSmi', () => {
+  it('解析多卡、引号和 N/A，丢弃表头', () => {
+    expect(parseNvidiaSmi(NVIDIA_SMI)).toEqual([
+      {
+        index: 0,
+        name: 'NVIDIA GeForce RTX 4090',
+        utilPct: 87,
+        memUsedMiB: 18200,
+        memTotalMiB: 24564,
+        tempC: 42,
+        powerW: 320,
+        powerLimitW: 450
+      },
+      {
+        index: 1,
+        name: 'NVIDIA A100, SXM4',
+        utilPct: null,
+        memUsedMiB: null,
+        memTotalMiB: 81920,
+        tempC: null,
+        powerW: 35.2,
+        powerLimitW: null
+      }
+    ])
+  })
+
+  it('空输出和没有设备时返回空数组', () => {
+    expect(parseNvidiaSmi('')).toEqual([])
+    expect(parseNvidiaSmi('No devices were found')).toEqual([])
+  })
+
+  it('占用率限制在 0 到 100', () => {
+    expect(parseNvidiaSmi('0, GPU, 140, 1, 2, 30, 10, 20')[0].utilPct).toBe(100)
   })
 })
